@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -14,16 +13,14 @@ public sealed partial class OAuthFlowTests : IDisposable
 {
     private const string RedirectUri = "https://openwebui.test/oauth/callback";
     private readonly ServerFactory _factory = new();
-    private readonly HttpClient _http;
+    private HttpClient? _client;
 
-    public OAuthFlowTests()
-    {
-        _http = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
-    }
+    // Created on first use so a test can change settings first.
+    private HttpClient _http => _client ??= _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
 
     public void Dispose()
     {
-        _http.Dispose();
+        _client?.Dispose();
         _factory.Dispose();
     }
 
@@ -95,9 +92,11 @@ public sealed partial class OAuthFlowTests : IDisposable
     }
 
     [Fact]
-    public async Task Static_client_skips_consent()
+    public async Task Allow_listed_redirect_uri_skips_consent()
     {
-        var tokens = await AuthorizeAsync("static-client", "static-secret", expectConsent: false, redirectUri: "https://openwebui.test/oauth/static/callback");
+        _factory.Settings["OAuth:AllowedRedirectUriPrefixes:0"] = "https://openwebui.test/";
+        var (clientId, clientSecret) = await RegisterAsync();
+        var tokens = await AuthorizeAsync(clientId, clientSecret, expectConsent: false);
         Assert.NotEmpty(await ListToolsAsync(tokens.AccessToken));
     }
 
@@ -289,19 +288,9 @@ public sealed partial class OAuthFlowTests : IDisposable
 
     private async Task<JsonElement> McpRequestAsync(string accessToken, string method, object parameters)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp") { Content = JsonRpc(method, parameters) };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        request.Headers.Accept.ParseAdd("application/json");
-        request.Headers.Accept.ParseAdd("text/event-stream");
-        request.Headers.Add("MCP-Protocol-Version", "2025-06-18");
-        var response = await _http.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(response.IsSuccessStatusCode, $"{(int)response.StatusCode}: {body}");
-        if (response.Content.Headers.ContentType?.MediaType == "text/event-stream")
-        {
-            body = body.Split('\n').Last(l => l.StartsWith("data:"))["data:".Length..].Trim();
-        }
-        return JsonDocument.Parse(body).RootElement;
+        var (response, body) = await ServerFactory.McpAsync(_http, accessToken, method, parameters);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return body!.Value;
     }
 
     private static object InitializeParams() => new

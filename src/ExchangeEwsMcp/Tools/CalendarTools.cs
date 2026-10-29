@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using ExchangeEwsMcp.Configuration;
 using ExchangeEwsMcp.Exchange;
 using Microsoft.Exchange.WebServices.Data;
 using ModelContextProtocol;
@@ -275,6 +276,10 @@ public sealed class CalendarTools(EwsContext ews)
         if (kind is not ("accept" or "tentative" or "decline"))
         {
             throw new McpException("response must be 'accept', 'tentative' or 'decline'.");
+        }
+        if (kind == "decline" && ews.Options.AccessLevel != AccessLevel.Full)
+        {
+            throw new McpException("Declining moves the meeting to Deleted Items, and deleting is disabled on this server.");
         }
 
         var item = await Item.Bind(ews.Service, new ItemId(id));

@@ -33,8 +33,10 @@ public sealed class AccessLevelTests
         Assert.True(call!.Value.TryGetProperty("error", out _) || call.Value.GetProperty("result").GetProperty("isError").GetBoolean());
     }
 
-    [Fact]
-    public async Task No_delete_level_refuses_moving_to_deleted_items()
+    [Theory]
+    [InlineData("move_mail")]
+    [InlineData("respond_to_meeting")]
+    public async Task No_delete_level_refuses_operations_that_end_in_deleted_items(string tool)
     {
         await using var ews = new FakeEwsServer();
         using var factory = new ServerFactory();
@@ -42,12 +44,14 @@ public sealed class AccessLevelTests
         factory.Settings["Exchange:EwsUrl"] = ews.Url;
         using var http = factory.CreateClient();
 
-        var (_, body) = await ServerFactory.McpAsync(http, factory.CreateAccessToken(), "tools/call",
-            new { name = "move_mail", arguments = new { ids = new[] { "AAMk1" }, folder = "Deleted Items" } });
+        object arguments = tool == "move_mail"
+            ? new { ids = new[] { "AAMk1" }, folder = "Deleted Items" }
+            : new { id = "AAMk1", response = "decline" };
+        var (_, body) = await ServerFactory.McpAsync(http, factory.CreateAccessToken(), "tools/call", new { name = tool, arguments });
 
         var result = body!.Value.GetProperty("result");
         Assert.True(result.GetProperty("isError").GetBoolean());
-        Assert.Contains("Deleting is disabled", result.GetProperty("content")[0].GetProperty("text").GetString());
+        Assert.Contains("eleting is disabled", result.GetProperty("content")[0].GetProperty("text").GetString());
         Assert.Empty(ews.Requests);
     }
 

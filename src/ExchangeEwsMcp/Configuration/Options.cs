@@ -18,12 +18,9 @@ public sealed class ServerOptions
     [Required]
     public string DataDirectory { get; set; } = "data";
 
-    /// <summary>Path the MCP endpoint is mapped to.</summary>
-    public string McpPath { get; set; } = "/mcp";
-
     public string Issuer => PublicBaseUrl.TrimEnd('/');
 
-    public string McpResource => Issuer + McpPath;
+    public string McpResource => Issuer + "/mcp";
 }
 
 /// <summary>
@@ -69,17 +66,11 @@ public sealed class OAuthServerOptions
 
     public TimeSpan AuthorizationCodeLifetime { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>Allow MCP clients to register themselves (RFC 7591). Open WebUI's "OAuth 2.1" mode needs this.</summary>
-    public bool AllowDynamicClientRegistration { get; set; } = true;
-
     /// <summary>
     /// If non-empty, redirect URIs of dynamically registered clients must start with one of these prefixes
     /// (e.g. "https://openwebui.contoso.com/"), and the consent page is skipped. Strongly recommended in production.
     /// </summary>
     public string[] AllowedRedirectUriPrefixes { get; set; } = [];
-
-    /// <summary>Pre-registered clients (e.g. for Open WebUI's "OAuth 2.1 (Static)" mode).</summary>
-    public List<StaticClientOptions> StaticClients { get; set; } = [];
 }
 
 public enum AccessLevel
@@ -104,18 +95,6 @@ public enum AuthMode
     /// EWS access token, which is passed through to Exchange. For servers only reachable by the MCP client.
     /// </summary>
     Passthrough,
-}
-
-public sealed class StaticClientOptions
-{
-    public string ClientId { get; set; } = "";
-
-    /// <summary>Optional. Without a secret the client is a public client (PKCE only).</summary>
-    public string? ClientSecret { get; set; }
-
-    public string? Name { get; set; }
-
-    public string[] RedirectUris { get; set; } = [];
 }
 
 /// <summary>Exchange Web Services settings.</summary>

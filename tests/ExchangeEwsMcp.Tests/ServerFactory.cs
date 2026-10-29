@@ -24,9 +24,6 @@ public sealed class ServerFactory : WebApplicationFactory<Program>
         ["IdentityProvider:Scopes:1"] = "offline_access",
         ["IdentityProvider:Scopes:2"] = "https://mail.contoso.com/EWS.AccessAsUser.All",
         ["Exchange:EwsUrl"] = "https://mail.contoso.com/EWS/Exchange.asmx",
-        ["OAuth:StaticClients:0:ClientId"] = "static-client",
-        ["OAuth:StaticClients:0:ClientSecret"] = "static-secret",
-        ["OAuth:StaticClients:0:RedirectUris:0"] = "https://openwebui.test/oauth/static/callback",
     };
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)

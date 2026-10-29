@@ -69,7 +69,7 @@ With `AllowSend=false` (the default), the parameters that would send something a
 | `AccessLevel` | Allowed |
 | --- | --- |
 | `ReadOnly` | Reading only: `whoami`, `resolve_names`, `list_folders`, `search_mail`, `read_mail`, `get_attachment`, `list_events`, `get_event`, `get_availability`, `get_out_of_office` |
-| `NoDelete` | Everything except deleting: no `delete_draft` or `delete_event`, and `move_mail` refuses Deleted Items |
+| `NoDelete` | Everything except deleting: no `delete_draft` or `delete_event`, `move_mail` refuses Deleted Items, and `respond_to_meeting` can't decline (Exchange moves declined meetings to Deleted Items) |
 | `Full` (default) | All tools |
 
 The filter uses the MCP annotations of the tools (`readOnlyHint`, `destructiveHint`). Sending is controlled separately
@@ -220,7 +220,6 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | --- | --- | --- |
 | `Server:PublicBaseUrl` | – | Origin under which clients reach the server, e.g. `https://mcp.contoso.com` or `http://exchange-ews-mcp:8080` (required) |
 | `Server:DataDirectory` | `data` (`/data` in Docker) | SQLite database and key ring |
-| `Server:McpPath` | `/mcp` | Path of the MCP endpoint |
 | `IdentityProvider:Authority` | – | Entra ID: `https://login.microsoftonline.com/<tenant>/v2.0`, AD FS: `https://adfs.contoso.com/adfs` |
 | `IdentityProvider:ClientId` / `ClientSecret` | – | Upstream confidential client (Broker mode only) |
 | `IdentityProvider:Scopes` | – | Must include the EWS scope and `offline_access` |
@@ -228,9 +227,7 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `OAuth:Mode` | `Broker` | `Broker` or `Passthrough` |
 | `OAuth:AccessTokenLifetime` | `01:00:00` | Lifetime of the server-issued access tokens |
 | `OAuth:RefreshTokenLifetime` | `30.00:00:00` | Lifetime of the server-issued refresh tokens (rotated on use) |
-| `OAuth:AllowDynamicClientRegistration` | `true` | RFC 7591 registration endpoint |
 | `OAuth:AllowedRedirectUriPrefixes` | `[]` | Allowed redirect URI prefixes for registered clients; these skip the consent page. If empty, any https or loopback URI may register and users must confirm a consent page |
-| `OAuth:StaticClients` | `[]` | Pre-registered clients (`ClientId`, `ClientSecret`, `RedirectUris`, `Name`) |
 | `Exchange:EwsUrl` | – | e.g. `https://mail.contoso.com/EWS/Exchange.asmx` (required) |
 | `Exchange:TimeZone` | `Europe/Berlin` | IANA or Windows time zone for interpreting and rendering dates |
 | `Exchange:AllowSend` | `false` | Enables the sending tools and parameters |

@@ -29,7 +29,7 @@ public static class OAuthServerEndpoints
         return app;
     }
 
-    private static IResult Metadata(IOptions<ServerOptions> server, IOptions<OAuthServerOptions> oauth)
+    private static IResult Metadata(IOptions<ServerOptions> server)
     {
         var issuer = server.Value.Issuer;
         var metadata = new Dictionary<string, object>
@@ -44,11 +44,8 @@ public static class OAuthServerEndpoints
             ["token_endpoint_auth_methods_supported"] = new[] { "none", "client_secret_post", "client_secret_basic" },
             ["scopes_supported"] = new[] { McpScopes.Exchange },
             ["authorization_response_iss_parameter_supported"] = true,
+            ["registration_endpoint"] = issuer + "/oauth/register",
         };
-        if (oauth.Value.AllowDynamicClientRegistration)
-        {
-            metadata["registration_endpoint"] = issuer + "/oauth/register";
-        }
         return Results.Json(metadata);
     }
 
@@ -56,10 +53,6 @@ public static class OAuthServerEndpoints
 
     private static IResult Register([FromBody] RegistrationRequest? request, OAuthStore store, IOptions<OAuthServerOptions> oauth, ILoggerFactory loggers)
     {
-        if (!oauth.Value.AllowDynamicClientRegistration)
-        {
-            return OAuthError("access_denied", "Dynamic client registration is disabled.", HttpStatusCode.Forbidden);
-        }
         if (request?.RedirectUris is not { Length: > 0 } redirectUris)
         {
             return OAuthError("invalid_redirect_uri", "At least one redirect_uri is required.");
@@ -193,7 +186,7 @@ public static class OAuthServerEndpoints
 
         // Consent protects against "confused deputy" attacks: the upstream IdP may sign the user in silently,
         // so with open registration the user must confirm which application receives access to the mailbox.
-        if (!client.IsStatic && !IsAllowListed(redirectUri, oauth.Value))
+        if (!IsAllowListed(redirectUri, oauth.Value))
         {
             return ConsentPage(client, tx);
         }

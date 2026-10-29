@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 
 namespace ExchangeEwsMcp.Tests;
@@ -80,22 +78,6 @@ public sealed class PassthroughTests : IAsyncLifetime
         ["exp"] = expires.ToUnixTimeSeconds(),
     });
 
-    private async Task<HttpResponseMessage> CallToolAsync(string token, string name, object arguments)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new { name, arguments },
-            }), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        request.Headers.Accept.ParseAdd("application/json");
-        request.Headers.Accept.ParseAdd("text/event-stream");
-        request.Headers.Add("MCP-Protocol-Version", "2025-06-18");
-        return await _http.SendAsync(request);
-    }
+    private async Task<HttpResponseMessage> CallToolAsync(string token, string name, object arguments) =>
+        (await ServerFactory.McpAsync(_http, token, "tools/call", new { name, arguments })).Response;
 }

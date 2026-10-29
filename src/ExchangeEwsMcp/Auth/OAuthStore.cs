@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace ExchangeEwsMcp.Auth;
 
-public sealed record OAuthClient(string ClientId, string? ClientSecretHash, string? Name, IReadOnlyList<string> RedirectUris, bool IsStatic)
+public sealed record OAuthClient(string ClientId, string? ClientSecretHash, string? Name, IReadOnlyList<string> RedirectUris)
 {
     public bool IsConfidential => ClientSecretHash is not null;
 }
@@ -53,20 +53,14 @@ public sealed class OAuthStore
     private readonly string _connectionString;
     private readonly IDataProtector _protector;
     private readonly TimeProvider _time;
-    private readonly IReadOnlyDictionary<string, OAuthClient> _staticClients;
 
-    public OAuthStore(IOptions<ServerOptions> server, IOptions<OAuthServerOptions> oauth, IDataProtectionProvider dataProtection, TimeProvider time)
+    public OAuthStore(IOptions<ServerOptions> server, IDataProtectionProvider dataProtection, TimeProvider time)
     {
         Directory.CreateDirectory(server.Value.DataDirectory);
         var path = Path.Combine(server.Value.DataDirectory, "exchange-ews-mcp.db");
         _connectionString = new SqliteConnectionStringBuilder { DataSource = path }.ToString();
         _protector = dataProtection.CreateProtector("ExchangeEwsMcp.UpstreamTokens.v1");
         _time = time;
-        _staticClients = oauth.Value.StaticClients
-            .Where(c => !string.IsNullOrWhiteSpace(c.ClientId))
-            .ToDictionary(
-                c => c.ClientId,
-                c => new OAuthClient(c.ClientId, string.IsNullOrEmpty(c.ClientSecret) ? null : Crypto.Sha256(c.ClientSecret), c.Name, c.RedirectUris, IsStatic: true));
         Initialize();
     }
 
@@ -158,7 +152,7 @@ public sealed class OAuthStore
     {
         var clientId = Guid.NewGuid().ToString("N");
         clientSecret = confidential ? Crypto.RandomToken() : null;
-        var client = new OAuthClient(clientId, clientSecret is null ? null : Crypto.Sha256(clientSecret), name, redirectUris, IsStatic: false);
+        var client = new OAuthClient(clientId, clientSecret is null ? null : Crypto.Sha256(clientSecret), name, redirectUris);
         using var db = Open();
         Execute(db, "INSERT INTO clients (client_id, client_secret_hash, name, redirect_uris, created_at) VALUES ($id, $secret, $name, $uris, $now)",
             ("$id", client.ClientId), ("$secret", client.ClientSecretHash), ("$name", name),
@@ -168,8 +162,6 @@ public sealed class OAuthStore
 
     public OAuthClient? FindClient(string clientId)
     {
-        if (_staticClients.TryGetValue(clientId, out var staticClient)) return staticClient;
-
         using var db = Open();
         using var cmd = Command(db, "SELECT client_secret_hash, name, redirect_uris FROM clients WHERE client_id = $id", ("$id", clientId));
         using var r = cmd.ExecuteReader();
@@ -178,8 +170,7 @@ public sealed class OAuthStore
             clientId,
             r.IsDBNull(0) ? null : r.GetString(0),
             r.IsDBNull(1) ? null : r.GetString(1),
-            JsonSerializer.Deserialize<string[]>(r.GetString(2)) ?? [],
-            IsStatic: false);
+            JsonSerializer.Deserialize<string[]>(r.GetString(2)) ?? []);
     }
 
     // ---- Authorization transactions ------------------------------------------------------------

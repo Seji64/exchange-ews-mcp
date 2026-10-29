@@ -177,7 +177,7 @@ if (!passthrough)
 {
     app.MapOAuthServer();
 }
-app.MapMcp(serverOptions.McpPath).RequireAuthorization();
+app.MapMcp("/mcp").RequireAuthorization();
 
 await app.RunAsync();
 return 0;
