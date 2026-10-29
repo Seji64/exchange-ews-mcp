@@ -1,45 +1,51 @@
 # Exchange EWS MCP
 
 An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Server (Subscription Edition, 2019)** that uses
-**EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container behind your reverse proxy.
+**EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container.
 
 - **Streamable HTTP** transport, so MCP clients like [Open WebUI](https://docs.openwebui.com/features/extensibility/mcp/) connect to it directly, without mcpo.
 - **Per-user OAuth**. Each user signs in with their own account in a browser popup, and the server calls EWS on their behalf.
+  Two modes: **Passthrough**, where the MCP client signs in and the server stays internal, and **Broker**, where the server is the OAuth server.
   - **Microsoft Entra ID** with Hybrid Modern Authentication (HMA) is the primary target.
   - **AD FS** (Exchange on-premises Modern Authentication, Exchange 2019 CU13+ / SE) is supported through the same OIDC code path.
 - **Draft-first by default.** Mail is saved as a draft and meetings are saved without sending invitations. Sending is opt-in.
 - **Shared and delegated mailboxes** work through the optional `mailbox` parameter (the usual Exchange permissions apply).
 
-## How authentication works
+## Authentication modes
+
+### Passthrough (recommended for Open WebUI)
 
 ```mermaid
 sequenceDiagram
     participant U as User (browser)
-    participant C as MCP client (Open WebUI)
-    participant S as Exchange EWS MCP
+    participant W as Open WebUI
     participant I as Entra ID / AD FS
+    participant S as Exchange EWS MCP (internal, http)
     participant X as Exchange (EWS)
 
-    C->>S: POST /mcp (no token)
-    S-->>C: 401 + resource metadata
-    C->>S: Dynamic client registration (/oauth/register)
-    C->>U: open /oauth/authorize (popup)
-    U->>S: consent page "Allow access?"
-    S->>I: redirect: sign-in (scope https://mail.contoso.com/EWS.AccessAsUser.All)
-    I-->>S: /oauth/callback?code=…  (code + PKCE redeemed with client secret)
-    S-->>C: redirect with authorization code
-    C->>S: /oauth/token → access + refresh token (server-issued)
-    C->>S: POST /mcp (Bearer)
-    S->>X: EWS SOAP (Bearer upstream token, refreshed automatically)
+    U->>W: enable tool
+    W->>I: popup: sign-in (scope https://mail.contoso.com/EWS.AccessAsUser.All)
+    I-->>W: https://openwebui.contoso.com/oauth/clients/mcp:exchange/callback
+    W->>S: POST /mcp (Bearer EWS token)
+    S->>X: EWS SOAP (same Bearer token)
 ```
 
-The server acts as a small **OAuth 2.1 authorization server** toward MCP clients. It implements RFC 8414 metadata,
-RFC 7591 dynamic client registration, RFC 9728 protected resource metadata, and PKCE. Behind that, it brokers the sign-in to
-Entra ID or AD FS. MCP clients get only the server's own tokens. The upstream Exchange tokens stay on the server,
-encrypted with ASP.NET Core Data Protection and stored in SQLite, and are refreshed automatically.
+Open WebUI is the OAuth client. The redirect URI points to Open WebUI, which already has a certificate. Open WebUI keeps
+and refreshes the tokens. The MCP server only has to be reachable *from Open WebUI*, e.g. as `http://exchange-ews-mcp:8080`
+in the same Docker network. It needs no certificate, no public DNS name and no client secret.
 
-Why the broker? Open WebUI's per-user "OAuth 2.1" mode needs dynamic client registration, which Entra ID doesn't offer.
-The broker also keeps the Exchange token out of the MCP client.
+The server passes the token to Exchange unchanged. Exchange validates it, and the server only reads its expiry and the user
+name. Because of this, the MCP endpoint must not be reachable by other clients.
+
+### Broker
+
+The server acts as a small **OAuth 2.1 authorization server** toward MCP clients. It implements RFC 8414 metadata,
+RFC 7591 dynamic client registration, RFC 9728 protected resource metadata, and PKCE. Behind that, it brokers the sign-in
+to Entra ID or AD FS. MCP clients get only the server's own tokens. The Exchange tokens stay on the server, encrypted
+with ASP.NET Core Data Protection and stored in SQLite, and are refreshed automatically.
+
+This mode works with any MCP client that supports dynamic client registration. The users' browsers must be able to reach
+the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth/callback`.
 
 ## Tools
 
@@ -67,12 +73,15 @@ uses modern authentication against your on-premises Exchange, this is the case.
 
 1. **Create an app registration** in Entra ID: *App registrations → New registration*.
    - Supported account types: *Single tenant*.
-   - Redirect URI: platform **Web**, `https://mcp.contoso.com/oauth/callback` (your `Server:PublicBaseUrl` + `/oauth/callback`).
+   - Redirect URI: platform **Web**, either
+     - Passthrough: `https://openwebui.contoso.com/oauth/clients/mcp:<connection-id>/callback`, where `<connection-id>`
+       is the *ID* of the tool connection in Open WebUI (e.g. `exchange`), or
+     - Broker: `https://mcp.contoso.com/oauth/callback` (your `Server:PublicBaseUrl` + `/oauth/callback`).
 2. **Certificates & secrets**: create a client secret.
 3. **API permissions**: *Add a permission → APIs my organization uses → Office 365 Exchange Online → Delegated →
    `EWS.AccessAsUser.All`*. Then click **Grant admin consent**. (`openid`, `profile`, `email` and `offline_access` from
    Microsoft Graph are added automatically.)
-4. **Configure the server**:
+4. **Configure the server** (Broker mode; for Passthrough, see [Connecting Open WebUI](#connecting-open-webui)):
 
    ```yaml
    Server__PublicBaseUrl: "https://mcp.contoso.com"
@@ -139,31 +148,55 @@ docker compose up -d
 
 [`docker-compose.yml`](docker-compose.yml) contains a complete example. Some notes:
 
-- Run the server behind a TLS-terminating reverse proxy. `Server:PublicBaseUrl` must be the public `https://` origin
-  without a path, because all OAuth URLs are derived from it.
-- `/data` holds the SQLite database and the Data Protection key ring. Keep it on a persistent volume and treat it as
-  sensitive, since it contains the encrypted refresh tokens. If you lose the keys, all users have to sign in again.
+- `Server:PublicBaseUrl` is the origin under which clients reach the server, without a path. In Broker mode it must be the
+  public `https://` URL behind your reverse proxy. In Passthrough mode the internal URL is enough, e.g. `http://exchange-ews-mcp:8080`.
+- `/data` holds the SQLite database and the Data Protection key ring. In Broker mode, keep it on a persistent volume and
+  treat it as sensitive, since it contains the encrypted refresh tokens. If you lose the keys, all users have to sign in again.
 - If Exchange or AD FS uses an internal CA, mount the CA certificate (PEM) and set `SSL_CERT_DIR=/etc/ssl/certs:/certs`.
   .NET on Linux then trusts it for all outgoing connections.
 - Health endpoint: `GET /healthz`.
 
 ## Connecting Open WebUI
 
-1. In Open WebUI, go to **Admin Settings → External Tools / Integrations → Add connection**.
-2. Set **Type** to `MCP (Streamable HTTP)` and **URL** to `https://mcp.contoso.com/mcp`.
-3. Set **Auth** to `OAuth 2.1` and click **Register Client**. Open WebUI uses dynamic client registration.
-4. Each user enables the tool in a chat (**+ → Integrations → Tools**). The first time, a popup opens with the consent
-   page and then the Microsoft (or AD FS) sign-in.
+### Passthrough (no certificate for the MCP server)
 
-Recommendations:
+1. Run the MCP server in the same Docker network as Open WebUI and don't publish its port:
 
-- Set `OAuth__AllowedRedirectUriPrefixes__0` to your Open WebUI URL (e.g. `https://openwebui.contoso.com/`).
-  Only Open WebUI can then register clients, and the extra consent page is skipped.
+   ```yaml
+   Server__PublicBaseUrl: "http://exchange-ews-mcp:8080"
+   OAuth__Mode: "Passthrough"
+   IdentityProvider__Authority: "https://login.microsoftonline.com/<tenant-id>/v2.0"
+   IdentityProvider__Scopes__0: "openid"
+   IdentityProvider__Scopes__1: "profile"
+   IdentityProvider__Scopes__2: "offline_access"
+   IdentityProvider__Scopes__3: "https://mail.contoso.com/EWS.AccessAsUser.All"
+   Exchange__EwsUrl: "https://mail.contoso.com/EWS/Exchange.asmx"
+   ```
+
+   `IdentityProvider:ClientId` and `ClientSecret` aren't needed, because Open WebUI holds them. The server publishes the
+   authority and scopes in its protected resource metadata, and Open WebUI picks them up from there.
+2. In Open WebUI, go to **Admin Settings → External Tools / Integrations → Add connection**:
+   - **Type**: `MCP (Streamable HTTP)`
+   - **URL**: `http://exchange-ews-mcp:8080/mcp`
+   - **ID**: e.g. `exchange`. It's part of the redirect URI, so don't change it later.
+   - **Auth**: `OAuth 2.1 (Static)` with the **Client ID** and **Client Secret** of the Entra app registration. Leave
+     *OAuth Server URL* and *Scopes* empty.
+   - Click **Register Client**, then save.
+3. In the Entra app registration, the redirect URI must be `https://openwebui.contoso.com/oauth/clients/mcp:exchange/callback`
+   (Open WebUI's `WEBUI_URL` + `/oauth/clients/mcp:<ID>/callback`).
+4. Each user enables the tool in a chat (**+ → Integrations → Tools**). The first time, a Microsoft sign-in popup opens.
+
+### Broker
+
+1. Set **Type** to `MCP (Streamable HTTP)`, **URL** to `https://mcp.contoso.com/mcp` and **Auth** to `OAuth 2.1`, then
+   click **Register Client**. Open WebUI uses dynamic client registration.
+2. Set `OAuth__AllowedRedirectUriPrefixes__0` to your Open WebUI URL (e.g. `https://openwebui.contoso.com/`). Only Open
+   WebUI can then register clients, and the extra consent page is skipped.
+
+### For both modes
+
 - Open WebUI needs a fixed `WEBUI_SECRET_KEY`, otherwise OAuth tokens break when it restarts.
 - Don't set OAuth tools as default tools on a model, because the sign-in redirect can't happen in the middle of a request.
-
-To use Open WebUI's `OAuth 2.1 (Static)` mode instead, pre-register the client in `OAuth:StaticClients`
-(client id, secret and Open WebUI's redirect URI). Static clients skip the consent page.
 
 ## Configuration reference
 
@@ -171,13 +204,14 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `Server:PublicBaseUrl` | – | Public origin, e.g. `https://mcp.contoso.com` (required) |
+| `Server:PublicBaseUrl` | – | Origin under which clients reach the server, e.g. `https://mcp.contoso.com` or `http://exchange-ews-mcp:8080` (required) |
 | `Server:DataDirectory` | `data` (`/data` in Docker) | SQLite database and key ring |
 | `Server:McpPath` | `/mcp` | Path of the MCP endpoint |
 | `IdentityProvider:Authority` | – | Entra ID: `https://login.microsoftonline.com/<tenant>/v2.0`, AD FS: `https://adfs.contoso.com/adfs` |
-| `IdentityProvider:ClientId` / `ClientSecret` | – | Upstream confidential client |
+| `IdentityProvider:ClientId` / `ClientSecret` | – | Upstream confidential client (Broker mode only) |
 | `IdentityProvider:Scopes` | – | Must include the EWS scope and `offline_access` |
 | `IdentityProvider:Resource` | – | Optional `resource` parameter (AD FS) |
+| `OAuth:Mode` | `Broker` | `Broker` or `Passthrough` |
 | `OAuth:AccessTokenLifetime` | `01:00:00` | Lifetime of the server-issued access tokens |
 | `OAuth:RefreshTokenLifetime` | `30.00:00:00` | Lifetime of the server-issued refresh tokens (rotated on use) |
 | `OAuth:AllowDynamicClientRegistration` | `true` | RFC 7591 registration endpoint |

@@ -28,20 +28,22 @@ public sealed class ExchangeServiceFactory : IDisposable
     /// <summary>Time zone used for the EWS requests and for rendering dates.</summary>
     public TimeZoneInfo TimeZone { get; }
 
-    public ExchangeService GetService(string grantId) =>
+    /// <param name="grantId">Cache key: the grant id, or the token hash in passthrough mode.</param>
+    /// <param name="passthroughToken">In passthrough mode, the EWS access token sent by the client.</param>
+    public ExchangeService GetService(string grantId, string? passthroughToken = null) =>
         _cache.GetOrCreate(grantId, entry =>
         {
             entry.SlidingExpiration = TimeSpan.FromMinutes(30);
             entry.RegisterPostEvictionCallback(static (_, value, _, _) => (value as IDisposable)?.Dispose());
-            return Create(grantId);
+            return Create(passthroughToken is null ? new GrantCredentials(_tokens, grantId) : new OAuthCredentials(passthroughToken));
         })!;
 
-    private ExchangeService Create(string grantId)
+    private ExchangeService Create(ExchangeCredentials credentials)
     {
         var service = new ExchangeService(ExchangeVersion.Exchange2016, TimeZone)
         {
             Url = new Uri(_options.EwsUrl),
-            Credentials = new GrantCredentials(_tokens, grantId),
+            Credentials = credentials,
             UseDefaultCredentials = false,
             AcceptGzipEncoding = true,
             UserAgent = "exchange-ews-mcp",

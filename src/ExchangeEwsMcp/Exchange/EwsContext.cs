@@ -30,7 +30,8 @@ public sealed class EwsContext(
 
     public string GrantId => User.FindFirstValue(AccessTokenAuthenticationHandler.GrantIdClaim) ?? throw new McpException("Not authenticated.");
 
-    public ExchangeService Service => _service ??= factory.GetService(GrantId);
+    public ExchangeService Service =>
+        _service ??= factory.GetService(GrantId, User.FindFirstValue(AccessTokenAuthenticationHandler.PassthroughTokenClaim));
 
     /// <summary>Primary SMTP address of the signed-in user (resolved via EWS, cached).</summary>
     public async Task<string> GetCurrentUserSmtpAsync()

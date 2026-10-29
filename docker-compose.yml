@@ -1,35 +1,42 @@
+# Passthrough mode next to Open WebUI: the MCP server is only reachable inside the Docker network,
+# Open WebUI performs the Entra ID sign-in (see README, "Connecting Open WebUI").
 services:
   exchange-ews-mcp:
     image: ghcr.io/seji64/exchange-ews-mcp:latest
-    build: .
     restart: unless-stopped
-    ports:
-      - "8080:8080"
+    # No published port: Open WebUI reaches it as http://exchange-ews-mcp:8080/mcp
+    networks: [openwebui]
     volumes:
       - ews-mcp-data:/data
       # Optional: internal CA that issued the Exchange certificate
       # - ./certs:/certs:ro
     environment:
-      Server__PublicBaseUrl: "https://mcp.contoso.com"
+      Server__PublicBaseUrl: "http://exchange-ews-mcp:8080"
+      OAuth__Mode: "Passthrough"
 
       # Microsoft Entra ID (Hybrid Modern Authentication)
       IdentityProvider__Authority: "https://login.microsoftonline.com/<tenant-id>/v2.0"
-      IdentityProvider__ClientId: "<application-client-id>"
-      IdentityProvider__ClientSecret: "<client-secret>"
       IdentityProvider__Scopes__0: "openid"
       IdentityProvider__Scopes__1: "profile"
-      IdentityProvider__Scopes__2: "email"
-      IdentityProvider__Scopes__3: "offline_access"
-      IdentityProvider__Scopes__4: "https://mail.contoso.com/EWS.AccessAsUser.All"
+      IdentityProvider__Scopes__2: "offline_access"
+      IdentityProvider__Scopes__3: "https://mail.contoso.com/EWS.AccessAsUser.All"
 
       Exchange__EwsUrl: "https://mail.contoso.com/EWS/Exchange.asmx"
       Exchange__TimeZone: "Europe/Berlin"
       Exchange__AllowSend: "false"
-      # Trust an internal CA for Exchange and AD FS
+      # Trust an internal CA for Exchange
       # SSL_CERT_DIR: "/etc/ssl/certs:/certs"
 
-      # Restrict dynamic client registration to your Open WebUI instance (also skips the consent page)
-      OAuth__AllowedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
+      # Broker mode instead (server publicly reachable via HTTPS, see README):
+      # Server__PublicBaseUrl: "https://mcp.contoso.com"
+      # OAuth__Mode: "Broker"
+      # IdentityProvider__ClientId: "<application-client-id>"
+      # IdentityProvider__ClientSecret: "<client-secret>"
+      # OAuth__AllowedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
+
+networks:
+  openwebui:
+    external: true   # the network your Open WebUI container is attached to
 
 volumes:
   ews-mcp-data:

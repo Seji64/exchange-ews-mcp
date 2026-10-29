@@ -41,10 +41,9 @@ public sealed class IdentityProviderOptions
     [Required]
     public string Authority { get; set; } = "";
 
-    [Required]
+    /// <summary>Upstream confidential client. Only used in <see cref="AuthMode.Broker"/> mode.</summary>
     public string ClientId { get; set; } = "";
 
-    [Required]
     public string ClientSecret { get; set; } = "";
 
     /// <summary>
@@ -61,6 +60,8 @@ public sealed class IdentityProviderOptions
 public sealed class OAuthServerOptions
 {
     public const string Section = "OAuth";
+
+    public AuthMode Mode { get; set; } = AuthMode.Broker;
 
     public TimeSpan AccessTokenLifetime { get; set; } = TimeSpan.FromHours(1);
 
@@ -79,6 +80,18 @@ public sealed class OAuthServerOptions
 
     /// <summary>Pre-registered clients (e.g. for Open WebUI's "OAuth 2.1 (Static)" mode).</summary>
     public List<StaticClientOptions> StaticClients { get; set; } = [];
+}
+
+public enum AuthMode
+{
+    /// <summary>This server is the OAuth authorization server and brokers the sign-in to the identity provider.</summary>
+    Broker,
+
+    /// <summary>
+    /// The MCP client signs in at the identity provider itself (e.g. Open WebUI "OAuth 2.1 (Static)") and sends the
+    /// EWS access token, which is passed through to Exchange. For servers only reachable by the MCP client.
+    /// </summary>
+    Passthrough,
 }
 
 public sealed class StaticClientOptions

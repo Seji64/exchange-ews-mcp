@@ -33,9 +33,14 @@ builder.Services.AddOptions<ServerOptions>().Bind(builder.Configuration.GetSecti
     .Validate(o => Uri.TryCreate(o.PublicBaseUrl, UriKind.Absolute, out var u) && u.AbsolutePath == "/",
         "Server:PublicBaseUrl must be an absolute URL without path, e.g. https://mcp.contoso.com")
     .ValidateOnStart();
+var oauthOptions = builder.Configuration.GetSection(OAuthServerOptions.Section).Get<OAuthServerOptions>() ?? new OAuthServerOptions();
+var passthrough = oauthOptions.Mode == AuthMode.Passthrough;
+
 builder.Services.AddOptions<IdentityProviderOptions>().Bind(builder.Configuration.GetSection(IdentityProviderOptions.Section))
     .ValidateDataAnnotations()
     .Validate(o => o.Scopes.Length > 0, "IdentityProvider:Scopes must contain the EWS scope.")
+    .Validate(o => passthrough || (o.ClientId.Length > 0 && o.ClientSecret.Length > 0),
+        "IdentityProvider:ClientId and ClientSecret are required in OAuth:Mode=Broker.")
     .ValidateOnStart();
 builder.Services.AddOptions<OAuthServerOptions>().Bind(builder.Configuration.GetSection(OAuthServerOptions.Section));
 builder.Services.AddOptions<ExchangeOptions>().Bind(builder.Configuration.GetSection(ExchangeOptions.Section))
@@ -43,6 +48,7 @@ builder.Services.AddOptions<ExchangeOptions>().Bind(builder.Configuration.GetSec
     .ValidateOnStart();
 
 var serverOptions = builder.Configuration.GetSection(ServerOptions.Section).Get<ServerOptions>() ?? new ServerOptions();
+var identityProvider = builder.Configuration.GetSection(IdentityProviderOptions.Section).Get<IdentityProviderOptions>() ?? new IdentityProviderOptions();
 var exchangeOptions = builder.Configuration.GetSection(ExchangeOptions.Section).Get<ExchangeOptions>() ?? new ExchangeOptions();
 
 builder.Services.AddDataProtection()
@@ -71,8 +77,9 @@ builder.Services.AddAuthentication(o =>
         o.ResourceMetadata = new()
         {
             Resource = serverOptions.McpResource,
-            AuthorizationServers = { serverOptions.Issuer },
-            ScopesSupported = [McpScopes.Exchange],
+            // In passthrough mode the client signs in at the identity provider directly and requests the EWS scopes.
+            AuthorizationServers = { passthrough ? identityProvider.Authority : serverOptions.Issuer },
+            ScopesSupported = passthrough ? [.. identityProvider.Scopes] : [McpScopes.Exchange],
             ResourceName = "Exchange EWS MCP",
         };
     });
@@ -148,7 +155,10 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/healthz", () => Results.Text("ok"));
-app.MapOAuthServer();
+if (!passthrough)
+{
+    app.MapOAuthServer();
+}
 app.MapMcp(serverOptions.McpPath).RequireAuthorization();
 
 await app.RunAsync();
