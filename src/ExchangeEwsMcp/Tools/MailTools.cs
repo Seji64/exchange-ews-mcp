@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Text;
+using ExchangeEwsMcp.Configuration;
 using ExchangeEwsMcp.Exchange;
 using Microsoft.Exchange.WebServices.Data;
 using ModelContextProtocol;
@@ -141,8 +142,7 @@ public sealed class MailTools(EwsContext ews)
     [Description("Reads a single e-mail including body, recipients and the list of attachments.")]
     public async Task<MailDetails> ReadMail(
         [Description("The item id from search_mail.")] string id,
-        [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text",
-        [Description("Mark the message as read. Default false.")] bool markAsRead = false)
+        [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text")
     {
         var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, EmailMessageSchema.BccRecipients)
         {
@@ -150,12 +150,6 @@ public sealed class MailTools(EwsContext ews)
         };
         var item = await Item.Bind(ews.Service, new ItemId(id), props);
         var message = item as EmailMessage;
-
-        if (markAsRead && message is not null && !message.IsRead)
-        {
-            message.IsRead = true;
-            await message.Update(ConflictResolutionMode.AutoResolve);
-        }
 
         var (body, truncated) = Truncate(Try(() => item.Body?.Text), ews.Options.MaxBodyLength);
         return new MailDetails(
@@ -431,11 +425,28 @@ public sealed class MailTools(EwsContext ews)
         [Description(MailboxDescription)] string? mailbox = null)
     {
         var target = await ews.ResolveFolderAsync(folder, mailbox, WellKnownFolderName.Inbox);
+        if (ews.Options.AccessLevel != AccessLevel.Full && await IsDeletedItemsAsync(target, mailbox))
+        {
+            throw new McpException("Deleting is disabled on this server, so items cannot be moved to Deleted Items.");
+        }
         var responses = await ews.Service.MoveItems(ids.Select(i => new ItemId(i)), target, false);
         var failed = responses.Where(r => r.Result != ServiceResult.Success).ToList();
         return failed.Count == 0
             ? $"Moved {ids.Length} item(s) to '{folder}'."
             : $"Moved {ids.Length - failed.Count} item(s); {failed.Count} failed: {string.Join("; ", failed.Select(f => f.ErrorMessage))}";
+    }
+
+    // shortcut: subfolders of Deleted Items are not detected; walk ParentFolderId if that matters.
+    private async Task<bool> IsDeletedItemsAsync(FolderId target, string? mailbox)
+    {
+        if (target.FolderName is not null)
+        {
+            return target.FolderName is WellKnownFolderName.DeletedItems or WellKnownFolderName.RecoverableItemsRoot
+                or WellKnownFolderName.RecoverableItemsDeletions or WellKnownFolderName.RecoverableItemsPurges;
+        }
+        var idOnly = new PropertySet(BasePropertySet.IdOnly);
+        var deletedItems = await Folder.Bind(ews.Service, ews.WellKnown(WellKnownFolderName.DeletedItems, mailbox), idOnly);
+        return deletedItems.Id.UniqueId == (await Folder.Bind(ews.Service, target, idOnly)).Id.UniqueId;
     }
 
     [McpServerTool(Name = "mark_mail", Destructive = false, Idempotent = true, OpenWorld = false)]

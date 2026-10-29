@@ -82,6 +82,18 @@ public sealed class OAuthServerOptions
     public List<StaticClientOptions> StaticClients { get; set; } = [];
 }
 
+public enum AccessLevel
+{
+    /// <summary>Only tools that don't change anything in the mailbox.</summary>
+    ReadOnly,
+
+    /// <summary>Create and edit, but no deleting (no delete tools, no moving to Deleted Items).</summary>
+    NoDelete,
+
+    /// <summary>All tools. Sending still requires <see cref="ExchangeOptions.AllowSend"/>.</summary>
+    Full,
+}
+
 public enum AuthMode
 {
     /// <summary>This server is the OAuth authorization server and brokers the sign-in to the identity provider.</summary>
@@ -123,6 +135,9 @@ public sealed class ExchangeOptions
     /// saved without sending invitations. When true, additional tools to send drafts / invitations are exposed.
     /// </summary>
     public bool AllowSend { get; set; }
+
+    /// <summary>Which tools are offered: read-only, everything except deleting, or all.</summary>
+    public AccessLevel AccessLevel { get; set; } = AccessLevel.Full;
 
     /// <summary>Upper bound for list/search results.</summary>
     public int MaxResults { get; set; } = 50;

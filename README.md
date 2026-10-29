@@ -9,6 +9,7 @@ An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Serv
   - **Microsoft Entra ID** with Hybrid Modern Authentication (HMA) is the primary target.
   - **AD FS** (Exchange on-premises Modern Authentication, Exchange 2019 CU13+ / SE) is supported through the same OIDC code path.
 - **Draft-first by default.** Mail is saved as a draft and meetings are saved without sending invitations. Sending is opt-in.
+- **Guard rails:** with `Exchange:AccessLevel`, the server can be read-only, or allow creating and editing but no deleting.
 - **Shared and delegated mailboxes** work through the optional `mailbox` parameter (the usual Exchange permissions apply).
 
 ## Authentication modes
@@ -60,6 +61,19 @@ the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth
 
 With `AllowSend=false` (the default), the parameters that would send something are rejected: `sendInvitations`,
 `sendUpdates`, `sendResponse`, and cancelling a meeting you organize.
+
+### Guard rails
+
+`Exchange:AccessLevel` limits which tools the server offers. Tools that aren't allowed are not listed and can't be called.
+
+| `AccessLevel` | Allowed |
+| --- | --- |
+| `ReadOnly` | Reading only: `whoami`, `resolve_names`, `list_folders`, `search_mail`, `read_mail`, `get_attachment`, `list_events`, `get_event`, `get_availability`, `get_out_of_office` |
+| `NoDelete` | Everything except deleting: no `delete_draft` or `delete_event`, and `move_mail` refuses Deleted Items |
+| `Full` (default) | All tools |
+
+The filter uses the MCP annotations of the tools (`readOnlyHint`, `destructiveHint`). Sending is controlled separately
+by `AllowSend`, and it is never possible with `ReadOnly`.
 
 Shared mailboxes: pass `mailbox: "team@contoso.com"` to `search_mail`, `list_folders`, `create_draft`, `list_events`,
 `create_event`, the out-of-office tools and others. The signed-in user needs Full Access, plus Send As or Send on Behalf
@@ -220,6 +234,7 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `Exchange:EwsUrl` | – | e.g. `https://mail.contoso.com/EWS/Exchange.asmx` (required) |
 | `Exchange:TimeZone` | `Europe/Berlin` | IANA or Windows time zone for interpreting and rendering dates |
 | `Exchange:AllowSend` | `false` | Enables the sending tools and parameters |
+| `Exchange:AccessLevel` | `Full` | `ReadOnly`, `NoDelete` or `Full` (see [Guard rails](#guard-rails)) |
 | `Exchange:MaxResults` | `50` | Upper bound for list/search results |
 | `Exchange:MaxBodyLength` | `20000` | Characters of a message body returned to the model |
 | `Exchange:MaxAttachmentBytes` | `5242880` | Largest attachment that is downloaded or added |

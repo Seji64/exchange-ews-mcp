@@ -10,7 +10,7 @@ namespace ExchangeEwsMcp.Tools;
 [McpServerToolType]
 public sealed class SendTools(EwsContext ews)
 {
-    [McpServerTool(Name = "send_draft", Destructive = true, OpenWorld = true)]
+    [McpServerTool(Name = "send_draft", Destructive = false, OpenWorld = true)]
     [Description("""
         Sends an existing draft. ONLY call this after the user has explicitly confirmed sending this specific draft
         (show recipients and subject first). A copy is saved in Sent Items.
@@ -31,7 +31,7 @@ public sealed class SendTools(EwsContext ews)
         return $"Sent '{draft.Subject}' to {recipients}.";
     }
 
-    [McpServerTool(Name = "send_meeting_invitations", Destructive = true, OpenWorld = true)]
+    [McpServerTool(Name = "send_meeting_invitations", Destructive = false, OpenWorld = true)]
     [Description("""
         Sends the invitations (or updates) of a meeting that was saved without sending. ONLY call this after the user
         explicitly confirmed.

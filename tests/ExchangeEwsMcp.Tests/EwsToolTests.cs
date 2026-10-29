@@ -1,9 +1,5 @@
 using System.Net;
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
-using ExchangeEwsMcp.Auth;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace ExchangeEwsMcp.Tests;
 
@@ -22,24 +18,7 @@ public sealed class EwsToolTests : IAsyncLifetime
         _factory.Settings["Exchange:TimeZone"] = "Europe/Berlin";
         _http = _factory.CreateClient();
 
-        // Create a grant directly instead of running the browser flow (covered by OAuthFlowTests).
-        var store = _factory.Services.GetRequiredService<OAuthStore>();
-        var tokens = _factory.Services.GetRequiredService<TokenService>();
-        var client = store.RegisterClient("test", ["https://openwebui.test/cb"], confidential: false, out _);
-        var grant = new Grant
-        {
-            Id = "grant-1",
-            ClientId = client.ClientId,
-            Subject = "oid-1",
-            UserPrincipalName = "alice@contoso.com",
-            Email = "alice@contoso.com",
-            DisplayName = "Alice",
-            UpstreamAccessToken = "ews-token-1",
-            UpstreamAccessTokenExpiresAt = DateTimeOffset.UtcNow.AddHours(1),
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-        store.SaveGrant(grant);
-        _accessToken = tokens.Issue(grant).AccessToken;
+        _accessToken = _factory.CreateAccessToken();
         await Task.CompletedTask;
     }
 
@@ -146,29 +125,8 @@ public sealed class EwsToolTests : IAsyncLifetime
 
     private async Task<JsonElement> CallToolAsync(string name, object arguments)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/mcp")
-        {
-            Content = new StringContent(JsonSerializer.Serialize(new
-            {
-                jsonrpc = "2.0",
-                id = 1,
-                method = "tools/call",
-                @params = new { name, arguments },
-            }), Encoding.UTF8, "application/json"),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _accessToken);
-        request.Headers.Accept.ParseAdd("application/json");
-        request.Headers.Accept.ParseAdd("text/event-stream");
-        request.Headers.Add("MCP-Protocol-Version", "2025-06-18");
-        var response = await _http.SendAsync(request);
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(response.StatusCode == HttpStatusCode.OK, $"{(int)response.StatusCode}: {body}");
-        if (response.Content.Headers.ContentType?.MediaType == "text/event-stream")
-        {
-            body = body.Split('\n').Last(l => l.StartsWith("data:"))["data:".Length..].Trim();
-        }
-        var root = JsonDocument.Parse(body).RootElement;
-        Assert.True(root.TryGetProperty("result", out var result), body);
-        return result;
+        var (response, body) = await ServerFactory.McpAsync(_http, _accessToken, "tools/call", new { name, arguments });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return body!.Value.GetProperty("result");
     }
 }

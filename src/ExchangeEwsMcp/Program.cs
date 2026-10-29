@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using ModelContextProtocol;
 using ModelContextProtocol.AspNetCore.Authentication;
 using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 
 if (args.Contains("--healthcheck"))
 {
@@ -97,7 +98,12 @@ var version = typeof(Program).Assembly.GetCustomAttribute<AssemblyInformationalV
 var mcp = builder.Services.AddMcpServer(o =>
     {
         o.ServerInfo = new Implementation { Name = "exchange-ews-mcp", Title = "Exchange EWS", Version = version };
-        o.ServerInstructions = exchangeOptions.AllowSend
+        o.ServerInstructions = exchangeOptions.AccessLevel switch
+        {
+            AccessLevel.ReadOnly => "This server is read-only: it can search and read, but not create or change anything.\n",
+            AccessLevel.NoDelete => "Deleting is disabled on this server.\n",
+            _ => "",
+        } + (exchangeOptions.AllowSend
             ? """
               Access to the user's on-premises Exchange mailbox (mail, calendar, address book, automatic replies).
               Mail is created as drafts. Sending (send_draft, send_meeting_invitations, sendInvitations/sendUpdates/sendResponse)
@@ -107,7 +113,7 @@ var mcp = builder.Services.AddMcpServer(o =>
               Access to the user's on-premises Exchange mailbox (mail, calendar, address book, automatic replies).
               This server never sends mail: messages are saved as drafts and meetings are saved without sending invitations,
               so the user can review and send them in Outlook. Times without offset are in the server time zone (see whoami).
-              """;
+              """);
     })
     .WithHttpTransport(o => o.Stateless = true)
     .WithTools<MailTools>()
@@ -137,6 +143,18 @@ if (exchangeOptions.AllowSend)
 {
     mcp.WithTools<SendTools>();
 }
+
+// Guard rails: drop the tools the access level does not allow, based on their MCP annotations.
+builder.Services.PostConfigure<McpServerOptions>(o =>
+{
+    foreach (var tool in o.ToolCollection?.ToList() ?? [])
+    {
+        if (!ToolPolicy.IsAllowed(tool.ProtocolTool.Annotations, exchangeOptions.AccessLevel))
+        {
+            o.ToolCollection!.Remove(tool);
+        }
+    }
+});
 
 var app = builder.Build();
 

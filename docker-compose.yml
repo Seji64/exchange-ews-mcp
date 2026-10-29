@@ -24,6 +24,7 @@ services:
       Exchange__EwsUrl: "https://mail.contoso.com/EWS/Exchange.asmx"
       Exchange__TimeZone: "Europe/Berlin"
       Exchange__AllowSend: "false"
+      Exchange__AccessLevel: "Full"   # ReadOnly | NoDelete | Full
       # Trust an internal CA for Exchange
       # SSL_CERT_DIR: "/etc/ssl/certs:/certs"
 

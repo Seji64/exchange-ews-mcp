@@ -11,7 +11,7 @@ namespace ExchangeEwsMcp.Tools;
 public sealed class PeopleTools(EwsContext ews)
 {
     [McpServerTool(Name = "whoami", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Returns the signed-in user, the server time zone, the current local time and whether sending mail is enabled.")]
+    [Description("Returns the signed-in user, the server time zone, the current local time, whether sending mail is enabled and the access level (ReadOnly, NoDelete, Full).")]
     public async Task<UserInfo> WhoAmI()
     {
         var smtp = await ews.GetCurrentUserSmtpAsync();
@@ -21,7 +21,8 @@ public sealed class PeopleTools(EwsContext ews)
             ews.User.FindFirstValue(ClaimTypes.Upn),
             ews.TimeZone.Id,
             ews.Format(ews.Now),
-            ews.Options.AllowSend);
+            ews.Options.AllowSend,
+            ews.Options.AccessLevel.ToString());
     }
 
     [McpServerTool(Name = "resolve_names", ReadOnly = true, Idempotent = true, OpenWorld = false)]
