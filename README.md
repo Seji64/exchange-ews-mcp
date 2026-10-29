@@ -3,6 +3,11 @@
 An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Server (Subscription Edition, 2019)** that uses
 **EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container.
 
+> [!WARNING]
+> **Work in progress.** This project has so far only been tested against simulated identity providers and EWS endpoints,
+> not against a real Exchange Server, Entra ID, AD FS or Open WebUI. Configuration and tools may still change.
+> Start with `Exchange:AccessLevel=ReadOnly` when you try it.
+
 - **Streamable HTTP** transport, so MCP clients like [Open WebUI](https://docs.openwebui.com/features/extensibility/mcp/) connect to it directly, without mcpo.
 - **Per-user OAuth**. Each user signs in with their own account in a browser popup, and the server calls EWS on their behalf.
   Two modes: **Passthrough**, where the MCP client signs in and the server stays internal, and **Broker**, where the server is the OAuth server.
