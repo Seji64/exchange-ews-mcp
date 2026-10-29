@@ -56,10 +56,6 @@ public sealed class UpstreamIdentityProvider(
         {
             query["resource"] = _options.Resource;
         }
-        foreach (var (key, value) in _options.AdditionalAuthorizeParameters)
-        {
-            query[key] = value;
-        }
         return QueryHelpers.AddQueryString(discovery.AuthorizationEndpoint, query);
     }
 

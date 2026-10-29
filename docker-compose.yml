@@ -8,7 +8,7 @@ services:
     volumes:
       - ews-mcp-data:/data
       # Optional: internal CA that issued the Exchange certificate
-      # - ./certs/internal-ca.pem:/certs/internal-ca.pem:ro
+      # - ./certs:/certs:ro
     environment:
       Server__PublicBaseUrl: "https://mcp.contoso.com"
 
@@ -25,11 +25,11 @@ services:
       Exchange__EwsUrl: "https://mail.contoso.com/EWS/Exchange.asmx"
       Exchange__TimeZone: "Europe/Berlin"
       Exchange__AllowSend: "false"
-      # Exchange__TrustedCaCertificatePath: "/certs/internal-ca.pem"
+      # Trust an internal CA for Exchange and AD FS
+      # SSL_CERT_DIR: "/etc/ssl/certs:/certs"
 
-      # Restrict dynamic client registration to your Open WebUI instance
+      # Restrict dynamic client registration to your Open WebUI instance (also skips the consent page)
       OAuth__AllowedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
-      OAuth__TrustedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
 
 volumes:
   ews-mcp-data:

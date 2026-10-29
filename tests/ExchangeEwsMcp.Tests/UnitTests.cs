@@ -46,10 +46,13 @@ public class UnitTests
     [InlineData("http://openwebui.contoso.com/cb", false)]
     [InlineData("https://evil.test/cb", false)]
     [InlineData("https://openwebui.contoso.com/cb#frag", false)]
+    [InlineData("https://openwebui.contoso.com.evil.test/cb", false)]
+    [InlineData("https://bare.contoso.com/cb", true)]
+    [InlineData("https://bare.contoso.com.evil.test/cb", false)]
     [InlineData("not a url", false)]
     public void Redirect_uri_validation(string uri, bool expected)
     {
-        var options = new OAuthServerOptions { AllowedRedirectUriPrefixes = ["https://openwebui.contoso.com/", "http://localhost", "http://127.0.0.1"] };
+        var options = new OAuthServerOptions { AllowedRedirectUriPrefixes = ["https://openwebui.contoso.com/", "https://bare.contoso.com", "http://localhost", "http://127.0.0.1"] };
         Assert.Equal(expected, OAuthServerEndpoints.IsAcceptableRedirectUri(uri, options));
     }
 

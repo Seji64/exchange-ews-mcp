@@ -117,9 +117,13 @@ public static class OAuthServerEndpoints
         {
             return false;
         }
-        return options.AllowedRedirectUriPrefixes.Length == 0
-            || options.AllowedRedirectUriPrefixes.Any(p => uri.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        return options.AllowedRedirectUriPrefixes.Length == 0 || IsAllowListed(uri, options);
     }
+
+    internal static bool IsAllowListed(string uri, OAuthServerOptions options) =>
+        options.AllowedRedirectUriPrefixes.Any(p => uri.StartsWith(p, StringComparison.OrdinalIgnoreCase)
+            // "https://a.test" must not match "https://a.test.evil.example/".
+            && (p.EndsWith('/') || uri.Length == p.Length || uri[p.Length] is '/' or ':' or '?'));
 
     // ---- Authorization endpoint ----------------------------------------------------------------
 
@@ -181,17 +185,15 @@ public static class OAuthServerEndpoints
         http.Response.Cookies.Append(BrowserBindingCookie, tx.BrowserBinding, new CookieOptions
         {
             HttpOnly = true,
-            Secure = server.Value.BaseUri.Scheme == Uri.UriSchemeHttps,
+            Secure = server.Value.Issuer.StartsWith("https:", StringComparison.OrdinalIgnoreCase),
             SameSite = SameSiteMode.Lax,
-            Path = CookiePath(server.Value),
+            Path = "/oauth",
             MaxAge = TransactionLifetime,
         });
 
         // Consent protects against "confused deputy" attacks: the upstream IdP may sign the user in silently,
-        // so the user must confirm which application receives access to the mailbox.
-        var trusted = client.IsStatic
-            || oauth.Value.TrustedRedirectUriPrefixes.Any(p => redirectUri.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-        if (!trusted)
+        // so with open registration the user must confirm which application receives access to the mailbox.
+        if (!client.IsStatic && !IsAllowListed(redirectUri, oauth.Value))
         {
             return ConsentPage(client, tx);
         }
@@ -222,8 +224,6 @@ public static class OAuthServerEndpoints
         return Results.Redirect(await upstream.BuildAuthorizeUrlAsync(tx.Id, tx.Nonce, tx.UpstreamCodeVerifier, http.RequestAborted));
     }
 
-    private static string CookiePath(ServerOptions server) => server.BaseUri.AbsolutePath.TrimEnd('/') + "/oauth";
-
     private static bool IsBoundToBrowser(HttpContext http, AuthTransaction tx) =>
         http.Request.Cookies.TryGetValue(BrowserBindingCookie, out var binding)
         && binding is not null
@@ -248,7 +248,7 @@ public static class OAuthServerEndpoints
             return ErrorPage("Request expired", "This sign-in is no longer valid. Please start again from your application.");
         }
         store.DeleteTransaction(tx.Id);
-        http.Response.Cookies.Delete(BrowserBindingCookie, new CookieOptions { Path = CookiePath(server.Value) });
+        http.Response.Cookies.Delete(BrowserBindingCookie, new CookieOptions { Path = "/oauth" });
 
         if (!string.IsNullOrEmpty(q["error"]))
         {

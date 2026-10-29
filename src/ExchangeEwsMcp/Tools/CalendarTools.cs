@@ -271,6 +271,12 @@ public sealed class CalendarTools(EwsContext ews)
     {
         if (sendResponse) ews.EnsureSendAllowed("meeting response");
 
+        var kind = response.ToLowerInvariant();
+        if (kind is not ("accept" or "tentative" or "decline"))
+        {
+            throw new McpException("response must be 'accept', 'tentative' or 'decline'.");
+        }
+
         var item = await Item.Bind(ews.Service, new ItemId(id));
         var appointment = item switch
         {
@@ -279,7 +285,6 @@ public sealed class CalendarTools(EwsContext ews)
             _ => throw new McpException("The item is neither a calendar event nor a meeting request."),
         };
 
-        var kind = response.ToLowerInvariant();
         if (sendResponse && !string.IsNullOrWhiteSpace(message))
         {
             if (kind == "decline")
@@ -301,8 +306,7 @@ public sealed class CalendarTools(EwsContext ews)
             {
                 "accept" => await appointment.Accept(sendResponse),
                 "tentative" => await appointment.AcceptTentatively(sendResponse),
-                "decline" => await appointment.Decline(sendResponse),
-                _ => throw new McpException("response must be 'accept', 'tentative' or 'decline'."),
+                _ => await appointment.Decline(sendResponse),
             };
         }
         return $"Meeting {kind} recorded{(sendResponse ? " and the organizer was notified" : " without notifying the organizer")}.";

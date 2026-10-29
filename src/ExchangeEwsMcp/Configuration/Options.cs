@@ -21,8 +21,6 @@ public sealed class ServerOptions
     /// <summary>Path the MCP endpoint is mapped to.</summary>
     public string McpPath { get; set; } = "/mcp";
 
-    public Uri BaseUri => new(PublicBaseUrl.TrimEnd('/') + "/");
-
     public string Issuer => PublicBaseUrl.TrimEnd('/');
 
     public string McpResource => Issuer + McpPath;
@@ -57,9 +55,6 @@ public sealed class IdentityProviderOptions
 
     /// <summary>Optional "resource" parameter (AD FS style), e.g. "https://mail.contoso.com/".</summary>
     public string? Resource { get; set; }
-
-    /// <summary>Additional query parameters appended to the upstream authorize request (e.g. "prompt", "domain_hint").</summary>
-    public Dictionary<string, string> AdditionalAuthorizeParameters { get; set; } = [];
 }
 
 /// <summary>Settings of the built-in OAuth 2.1 authorization server that MCP clients talk to.</summary>
@@ -78,15 +73,9 @@ public sealed class OAuthServerOptions
 
     /// <summary>
     /// If non-empty, redirect URIs of dynamically registered clients must start with one of these prefixes
-    /// (e.g. "https://openwebui.contoso.com/"). Strongly recommended in production.
+    /// (e.g. "https://openwebui.contoso.com/"), and the consent page is skipped. Strongly recommended in production.
     /// </summary>
     public string[] AllowedRedirectUriPrefixes { get; set; } = [];
-
-    /// <summary>
-    /// Redirect URI prefixes that are trusted enough to skip the consent page.
-    /// Clients with other redirect URIs must be approved by the user on every authorization.
-    /// </summary>
-    public string[] TrustedRedirectUriPrefixes { get; set; } = [];
 
     /// <summary>Pre-registered clients (e.g. for Open WebUI's "OAuth 2.1 (Static)" mode).</summary>
     public List<StaticClientOptions> StaticClients { get; set; } = [];
@@ -121,12 +110,6 @@ public sealed class ExchangeOptions
     /// saved without sending invitations. When true, additional tools to send drafts / invitations are exposed.
     /// </summary>
     public bool AllowSend { get; set; }
-
-    /// <summary>PEM/CRT file with additional CA certificate(s) trusted for the EWS endpoint.</summary>
-    public string? TrustedCaCertificatePath { get; set; }
-
-    /// <summary>Disables TLS certificate validation for EWS. Only for testing.</summary>
-    public bool IgnoreCertificateErrors { get; set; }
 
     /// <summary>Upper bound for list/search results.</summary>
     public int MaxResults { get; set; } = 50;

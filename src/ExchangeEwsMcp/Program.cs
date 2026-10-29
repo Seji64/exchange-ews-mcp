@@ -135,7 +135,7 @@ var app = builder.Build();
 
 // The server is usually run behind a reverse proxy. All absolute URLs (issuer, redirect URIs, resource metadata)
 // are derived from Server:PublicBaseUrl, so make the request look like it arrived on the public origin.
-var publicUri = app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.BaseUri;
+var publicUri = new Uri(app.Services.GetRequiredService<IOptions<ServerOptions>>().Value.Issuer);
 app.Use((context, next) =>
 {
     context.Request.Scheme = publicUri.Scheme;

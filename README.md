@@ -143,7 +143,8 @@ docker compose up -d
   without a path, because all OAuth URLs are derived from it.
 - `/data` holds the SQLite database and the Data Protection key ring. Keep it on a persistent volume and treat it as
   sensitive, since it contains the encrypted refresh tokens. If you lose the keys, all users have to sign in again.
-- If Exchange uses an internal CA, mount the CA certificate (PEM) and set `Exchange__TrustedCaCertificatePath`.
+- If Exchange or AD FS uses an internal CA, mount the CA certificate (PEM) and set `SSL_CERT_DIR=/etc/ssl/certs:/certs`.
+  .NET on Linux then trusts it for all outgoing connections.
 - Health endpoint: `GET /healthz`.
 
 ## Connecting Open WebUI
@@ -156,8 +157,8 @@ docker compose up -d
 
 Recommendations:
 
-- Set `OAuth__AllowedRedirectUriPrefixes__0` and `OAuth__TrustedRedirectUriPrefixes__0` to your Open WebUI URL
-  (e.g. `https://openwebui.contoso.com/`). Only Open WebUI can then register clients, and the extra consent page is skipped.
+- Set `OAuth__AllowedRedirectUriPrefixes__0` to your Open WebUI URL (e.g. `https://openwebui.contoso.com/`).
+  Only Open WebUI can then register clients, and the extra consent page is skipped.
 - Open WebUI needs a fixed `WEBUI_SECRET_KEY`, otherwise OAuth tokens break when it restarts.
 - Don't set OAuth tools as default tools on a model, because the sign-in redirect can't happen in the middle of a request.
 
@@ -177,18 +178,14 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `IdentityProvider:ClientId` / `ClientSecret` | – | Upstream confidential client |
 | `IdentityProvider:Scopes` | – | Must include the EWS scope and `offline_access` |
 | `IdentityProvider:Resource` | – | Optional `resource` parameter (AD FS) |
-| `IdentityProvider:AdditionalAuthorizeParameters` | – | e.g. `domain_hint`, `prompt` |
 | `OAuth:AccessTokenLifetime` | `01:00:00` | Lifetime of the server-issued access tokens |
 | `OAuth:RefreshTokenLifetime` | `30.00:00:00` | Lifetime of the server-issued refresh tokens (rotated on use) |
 | `OAuth:AllowDynamicClientRegistration` | `true` | RFC 7591 registration endpoint |
-| `OAuth:AllowedRedirectUriPrefixes` | `[]` | Allowed redirect URI prefixes for registered clients. If empty, any https or loopback URI is allowed |
-| `OAuth:TrustedRedirectUriPrefixes` | `[]` | Redirect URIs that skip the consent page |
+| `OAuth:AllowedRedirectUriPrefixes` | `[]` | Allowed redirect URI prefixes for registered clients; these skip the consent page. If empty, any https or loopback URI may register and users must confirm a consent page |
 | `OAuth:StaticClients` | `[]` | Pre-registered clients (`ClientId`, `ClientSecret`, `RedirectUris`, `Name`) |
 | `Exchange:EwsUrl` | – | e.g. `https://mail.contoso.com/EWS/Exchange.asmx` (required) |
 | `Exchange:TimeZone` | `Europe/Berlin` | IANA or Windows time zone for interpreting and rendering dates |
 | `Exchange:AllowSend` | `false` | Enables the sending tools and parameters |
-| `Exchange:TrustedCaCertificatePath` | – | PEM file with additional trusted CA(s) for EWS |
-| `Exchange:IgnoreCertificateErrors` | `false` | Testing only |
 | `Exchange:MaxResults` | `50` | Upper bound for list/search results |
 | `Exchange:MaxBodyLength` | `20000` | Characters of a message body returned to the model |
 | `Exchange:MaxAttachmentBytes` | `5242880` | Largest attachment that is downloaded or added |
