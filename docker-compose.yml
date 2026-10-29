@@ -1,0 +1,35 @@
+services:
+  exchange-ews-mcp:
+    image: ghcr.io/seji64/exchange-ews-mcp:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ews-mcp-data:/data
+      # Optional: internal CA that issued the Exchange certificate
+      # - ./certs/internal-ca.pem:/certs/internal-ca.pem:ro
+    environment:
+      Server__PublicBaseUrl: "https://mcp.contoso.com"
+
+      # Microsoft Entra ID (Hybrid Modern Authentication)
+      IdentityProvider__Authority: "https://login.microsoftonline.com/<tenant-id>/v2.0"
+      IdentityProvider__ClientId: "<application-client-id>"
+      IdentityProvider__ClientSecret: "<client-secret>"
+      IdentityProvider__Scopes__0: "openid"
+      IdentityProvider__Scopes__1: "profile"
+      IdentityProvider__Scopes__2: "email"
+      IdentityProvider__Scopes__3: "offline_access"
+      IdentityProvider__Scopes__4: "https://mail.contoso.com/EWS.AccessAsUser.All"
+
+      Exchange__EwsUrl: "https://mail.contoso.com/EWS/Exchange.asmx"
+      Exchange__TimeZone: "Europe/Berlin"
+      Exchange__AllowSend: "false"
+      # Exchange__TrustedCaCertificatePath: "/certs/internal-ca.pem"
+
+      # Restrict dynamic client registration to your Open WebUI instance
+      OAuth__AllowedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
+      OAuth__TrustedRedirectUriPrefixes__0: "https://openwebui.contoso.com/"
+
+volumes:
+  ews-mcp-data:

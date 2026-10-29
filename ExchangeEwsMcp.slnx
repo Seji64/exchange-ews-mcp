@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ExchangeEwsMcp/ExchangeEwsMcp.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ExchangeEwsMcp.Tests/ExchangeEwsMcp.Tests.csproj" />
+  </Folder>
+</Solution>
