@@ -36,6 +36,7 @@ public sealed class FakeEwsServer : IAsyncDisposable
             if (StatusCode != 200)
             {
                 http.Response.StatusCode = StatusCode;
+                http.Response.Headers["x-ms-diagnostics"] = "2000003;reason=\"Invalid audience\"";
                 return;
             }
             var operation = Responses.Keys.FirstOrDefault(op => body.Contains($":{op} ") || body.Contains($":{op}>"));

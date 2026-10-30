@@ -104,7 +104,9 @@ public sealed class EwsToolTests : IAsyncLifetime
         _ews.StatusCode = 401;
         var result = await CallToolAsync("list_events", new { });
         Assert.True(result.GetProperty("isError").GetBoolean());
-        Assert.Contains("401", result.GetProperty("content")[0].GetProperty("text").GetString());
+        var text = result.GetProperty("content")[0].GetProperty("text").GetString();
+        Assert.Contains("401", text);
+        Assert.Contains("x-ms-diagnostics: 2000003;reason=\"Invalid audience\"", text);
     }
 
     [Fact]

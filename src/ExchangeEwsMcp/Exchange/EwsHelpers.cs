@@ -105,24 +105,30 @@ internal static class EwsHelpers
             ServiceError.ErrorInvalidIdMalformed or ServiceError.ErrorInvalidIdNotAnItemAttachmentId => "The id is malformed.",
             _ => $"Exchange returned {sre.ErrorCode}: {sre.Message}",
         },
-        ServiceRequestException when HttpStatus(e) == HttpStatusCode.Unauthorized =>
+        ServiceRequestException when HttpResponse(e)?.StatusCode == HttpStatusCode.Unauthorized =>
             "Exchange rejected the access token (HTTP 401). Check the Hybrid Modern Authentication / AD FS configuration " +
-            "(EWS URL registered as service principal name / AD FS Web API identifier, EWS.AccessAsUser.All scope).",
-        ServiceRequestException when HttpStatus(e) is { } status =>
-            $"Exchange returned HTTP {(int)status} {status}.",
+            "(EWS URL registered as service principal name / AD FS Web API identifier, EWS.AccessAsUser.All scope)." +
+            AuthDiagnostics(HttpResponse(e)!),
+        ServiceRequestException when HttpResponse(e) is { } response =>
+            $"Exchange returned HTTP {(int)response.StatusCode} {response.StatusCode}.",
         ServiceRequestException sre => $"The request to Exchange failed: {sre.Message}",
         ServiceLocalException sle => sle.Message,
         _ => e.Message,
     };
 
-    private static HttpStatusCode? HttpStatus(Exception e)
+    private static HttpResponseMessage? HttpResponse(Exception e)
     {
         for (var inner = e.InnerException; inner is not null; inner = inner.InnerException)
         {
             // EwsHttpClientException is internal to the EWS library; read its Response property via reflection.
-            if (inner.GetType().GetProperty("Response")?.GetValue(inner) is HttpResponseMessage response) return response.StatusCode;
-            if (inner is HttpRequestException { StatusCode: { } status }) return status;
+            if (inner.GetType().GetProperty("Response")?.GetValue(inner) is HttpResponseMessage response) return response;
         }
         return null;
     }
+
+    // Exchange explains token rejections in these headers (e.g. invalid audience or signature).
+    private static string AuthDiagnostics(HttpResponseMessage response) =>
+        string.Concat(new[] { "x-ms-diagnostics", "WWW-Authenticate" }
+            .Where(h => response.Headers.Contains(h))
+            .Select(h => $" {h}: {string.Join(", ", response.Headers.GetValues(h))}"));
 }

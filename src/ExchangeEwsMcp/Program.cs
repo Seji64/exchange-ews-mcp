@@ -130,14 +130,15 @@ var mcp = builder.Services.AddMcpServer(o =>
         }
         catch (Exception e) when (e is GrantExpiredException or ServiceResponseException or ServiceRequestException or ServiceLocalException)
         {
-            var logger = context.Services?.GetService<ILoggerFactory>()?.CreateLogger("ExchangeEwsMcp.Tools");
-            logger?.LogWarning(e, "Tool {Tool} failed", context.Params?.Name);
             // Token refresh failures surface from inside the EWS library, possibly wrapped.
             var expired = e as GrantExpiredException ?? e.InnerException as GrantExpiredException;
+            var message = expired?.Message ?? EwsHelpers.DescribeEwsError(e);
+            var logger = context.Services?.GetService<ILoggerFactory>()?.CreateLogger("ExchangeEwsMcp.Tools");
+            logger?.LogWarning(e, "Tool {Tool} failed: {Reason}", context.Params?.Name, message);
             return new CallToolResult
             {
                 IsError = true,
-                Content = [new TextContentBlock { Text = expired?.Message ?? EwsHelpers.DescribeEwsError(e) }],
+                Content = [new TextContentBlock { Text = message }],
             };
         }
     }));
