@@ -134,7 +134,7 @@ var mcp = builder.Services.AddMcpServer(o =>
             var expired = e as GrantExpiredException ?? e.InnerException as GrantExpiredException;
             var message = expired?.Message ?? EwsHelpers.DescribeEwsError(e);
             var logger = context.Services?.GetService<ILoggerFactory>()?.CreateLogger("ExchangeEwsMcp.Tools");
-            logger?.LogWarning(e, "Tool {Tool} failed: {Reason}", context.Params?.Name, message);
+            logger?.LogWarning(e, "Tool {Tool} failed: {Reason}{Token}", context.Params?.Name, message, DescribeToken(context.User));
             return new CallToolResult
             {
                 IsError = true,
@@ -187,6 +187,14 @@ return 0;
 
 public partial class Program
 {
+    /// <summary>Non-secret claims of a passthrough token, to diagnose rejected tokens.</summary>
+    private static string DescribeToken(System.Security.Claims.ClaimsPrincipal? user)
+    {
+        var claims = UpstreamIdentityProvider.ReadJwtPayload(user?.FindFirst(AccessTokenAuthenticationHandler.PassthroughTokenClaim)?.Value);
+        return claims is null ? "" : " (token " + string.Join(", ", new[] { "aud", "iss", "scp", "ver", "appid", "azp", "upn" }
+            .Where(claims.ContainsKey).Select(c => $"{c}={claims[c]}")) + ")";
+    }
+
     internal static string? ExchangeResource(IEnumerable<string> scopes) =>
         scopes.Select(s => Uri.TryCreate(s, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps ? u.GetLeftPart(UriPartial.Authority) : null)
             .FirstOrDefault(r => r is not null);
