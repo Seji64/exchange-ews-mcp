@@ -73,7 +73,8 @@ the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth
 | Area | Tools |
 | --- | --- |
 | User | `whoami`, `resolve_names`, `expand_group` (members of a distribution list, optionally nested) |
-| Mail | `list_folders`, `search_mail`, `read_mail`, `get_attachment`, `move_mail`, `mark_mail` |
+| Mail | `list_folders`, `search_mail`, `read_mail`, `get_attachment` (text of PDF/Word/text files), `move_mail`, `mark_mail` |
+| Downloads (only with `EnableDownloadLinks`) | `prepare_attachment_download` |
 | Drafts | `create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `add_attachment_to_draft`, `delete_draft` |
 | Calendar | `list_events`, `get_event`, `get_availability` (free/busy + suggested times), `create_event`, `update_event`, `delete_event`, `respond_to_meeting` |
 | Automatic replies | `get_out_of_office`, `set_out_of_office` |
@@ -101,7 +102,7 @@ With `AllowSend=false` (the default), the parameters that would send something a
 
 | `AccessLevel` | Allowed |
 | --- | --- |
-| `ReadOnly` | Reading only: `whoami`, `resolve_names`, `expand_group`, `list_folders`, `search_mail`, `read_mail`, `get_attachment`, `list_events`, `get_event`, `get_availability`, `get_out_of_office` |
+| `ReadOnly` | Reading only: `whoami`, `resolve_names`, `expand_group`, `list_folders`, `search_mail`, `read_mail`, `get_attachment`, `list_events`, `get_event`, `get_availability`, `get_out_of_office` (plus `prepare_attachment_download` if enabled) |
 | `NoDelete` | Everything except deleting: no `delete_draft` or `delete_event`, `move_mail` refuses Deleted Items, and `respond_to_meeting` can't decline (Exchange moves declined meetings to Deleted Items) |
 | `Full` (default) | All tools |
 

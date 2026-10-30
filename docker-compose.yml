@@ -25,6 +25,7 @@ services:
       Exchange__TimeZone: "Europe/Berlin"
       Exchange__AllowSend: "false"
       Exchange__AccessLevel: "Full"   # ReadOnly | NoDelete | Full
+      # Exchange__EnableDownloadLinks: "true"   # only with Fileshed installed in Open WebUI
       # Trust an internal CA for Exchange
       # SSL_CERT_DIR: "/etc/ssl/certs:/certs"
 
