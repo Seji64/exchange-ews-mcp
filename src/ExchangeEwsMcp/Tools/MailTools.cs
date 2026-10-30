@@ -3,6 +3,7 @@ using System.Text;
 using ExchangeEwsMcp.Configuration;
 using ExchangeEwsMcp.Exchange;
 using Microsoft.Exchange.WebServices.Data;
+using Microsoft.Extensions.Caching.Memory;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -11,7 +12,7 @@ using static ExchangeEwsMcp.Exchange.EwsHelpers;
 namespace ExchangeEwsMcp.Tools;
 
 [McpServerToolType]
-public sealed class MailTools(EwsContext ews)
+public sealed class MailTools(EwsContext ews, IMemoryCache cache)
 {
     internal const string MailboxDescription =
         "Optional shared or delegated mailbox (e-mail address, alias or name). Omit for the user's own mailbox.";
@@ -56,7 +57,7 @@ public sealed class MailTools(EwsContext ews)
 
         return folders
             .Where(f => includeAllFolderTypes || f.FolderClass is null or "" || f.FolderClass.StartsWith("IPF.Note", StringComparison.OrdinalIgnoreCase))
-            .Select(f => new FolderInfo(f.Id.UniqueId!, f.DisplayName, PathOf(f), f.TotalCount, Try(() => f.UnreadCount), f.ChildFolderCount))
+            .Select(f => new FolderInfo(PathOf(f), f.TotalCount, Try(() => f.UnreadCount), f.ChildFolderCount))
             .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
@@ -69,14 +70,14 @@ public sealed class MailTools(EwsContext ews)
         """)]
     public async Task<SearchResult<MailSummary>> SearchMail(
         [Description("Free-text search (Exchange AQS/KQL). Optional.")] string? query = null,
-        [Description("Folder: well-known name (inbox, sentitems, drafts, deleteditems, junkemail, archive), a path like 'Inbox/Projects' or a folder id. Default inbox.")] string? folder = null,
+        [Description("Folder: well-known name (inbox, sentitems, drafts, deleteditems, junkemail, archive), or a path from list_folders like 'Inbox/Projects'. Default inbox.")] string? folder = null,
         [Description("Only mails from this sender (name or address).")] string? from = null,
         [Description("Only mails whose subject contains this text.")] string? subject = null,
         [Description("Only mails received on/after this date/time (ISO 8601).")] string? since = null,
         [Description("Only mails received before this date/time (ISO 8601).")] string? until = null,
         [Description("Only unread mails.")] bool unreadOnly = false,
         [Description("Only mails with attachments.")] bool hasAttachments = false,
-        [Description("Maximum number of results (default 20).")] int maxResults = 20,
+        [Description("Maximum number of results (default 10, at most 25). Use offset to page; narrow the search rather than paging far.")] int maxResults = 10,
         [Description("Number of results to skip, for paging.")] int offset = 0,
         [Description(MailboxDescription)] string? mailbox = null)
     {
@@ -137,13 +138,20 @@ public sealed class MailTools(EwsContext ews)
             item.Id.UniqueId!,
             Try(() => item.Subject),
             message is null ? null : ToPerson(Try(() => message.From)),
-            Try(() => item.DisplayTo),
+            Shorten(Try(() => item.DisplayTo), 80),
             ews.TryFormat(() => item.DateTimeReceived),
             message is null || Try(() => message.IsRead),
-            Try(() => item.HasAttachments),
-            Try(() => item.Importance).ToString(),
-            Try(() => item.IsDraft),
-            NullIfEmpty(Try(() => item.Preview)));
+            Try(() => item.HasAttachments) ? true : null,
+            Try(() => item.Importance) is var importance && importance != Importance.Normal ? importance.ToString() : null,
+            Try(() => item.IsDraft) ? true : null,
+            Shorten(Try(() => item.Preview), 140));
+    }
+
+    // Search results are meant for picking a mail; read_mail returns the full content.
+    private static string? Shorten(string? text, int max)
+    {
+        text = NullIfEmpty(text)?.Trim();
+        return text is null || text.Length <= max ? text : text[..max].TrimEnd() + "…";
     }
 
     [McpServerTool(Name = "read_mail", ReadOnly = true, Idempotent = true, OpenWorld = false)]
@@ -151,17 +159,24 @@ public sealed class MailTools(EwsContext ews)
     public async Task<MailDetails> ReadMail(
         [Description("The item id from search_mail.")] string id,
         [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text",
+        [Description("Include the quoted earlier messages of the thread. Default false: only the new part of this message.")] bool includeQuotedHistory = false,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
-        var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, EmailMessageSchema.BccRecipients)
+        var bodyType = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? BodyType.HTML : BodyType.Text;
+        var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, ItemSchema.UniqueBody, EmailMessageSchema.BccRecipients)
         {
-            RequestedBodyType = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? BodyType.HTML : BodyType.Text,
+            RequestedBodyType = bodyType,
+            RequestedUniqueBodyType = bodyType,
         };
         var item = await Item.Bind(ews.Service, new ItemId(id), props);
         var message = item as EmailMessage;
 
-        var (body, truncated) = Truncate(Try(() => item.Body?.Text), ews.Options.MaxBodyLength);
+        // UniqueBody is the part Exchange identifies as new in this message, without the quoted thread.
+        var fullBody = Try(() => item.Body?.Text);
+        var uniqueBody = NullIfEmpty(Try(() => item.UniqueBody?.Text));
+        var useUnique = !includeQuotedHistory && uniqueBody is not null && uniqueBody.Length < (fullBody?.Length ?? 0);
+        var (body, truncated) = Truncate(useUnique ? uniqueBody : fullBody, ews.Options.MaxBodyLength);
         return new MailDetails(
             item.Id.UniqueId!,
             Try(() => item.Subject),
@@ -179,6 +194,7 @@ public sealed class MailTools(EwsContext ews)
             Try(() => item.Body?.BodyType) == BodyType.HTML ? "html" : "text",
             body,
             truncated,
+            useUnique ? true : null,
             ListAttachments(item));
     }
 
@@ -308,8 +324,7 @@ public sealed class MailTools(EwsContext ews)
         var reply = original.CreateReply(replyAll);
         reply.BodyPrefix = await BodyAsync(body, bodyFormat, includeSignature);
         var draft = await reply.Save(ews.WellKnown(WellKnownFolderName.Drafts));
-        await draft.Load(new PropertySet(BasePropertySet.IdOnly, ItemSchema.Subject));
-        return new DraftResult(draft.Id.UniqueId!, draft.Subject, "Drafts", DraftSavedMessage());
+        return new DraftResult(draft.Id.UniqueId!, original.Subject, "Drafts", DraftSavedMessage());
     }
 
     [McpServerTool(Name = "create_forward_draft", Destructive = false, OpenWorld = false)]
@@ -333,8 +348,7 @@ public sealed class MailTools(EwsContext ews)
             forward.BodyPrefix = await BodyAsync(body, bodyFormat, includeSignature);
         }
         var draft = await forward.Save(ews.WellKnown(WellKnownFolderName.Drafts));
-        await draft.Load(new PropertySet(BasePropertySet.IdOnly, ItemSchema.Subject));
-        return new DraftResult(draft.Id.UniqueId!, draft.Subject, "Drafts", DraftSavedMessage());
+        return new DraftResult(draft.Id.UniqueId!, original.Subject, "Drafts", DraftSavedMessage());
     }
 
     [McpServerTool(Name = "update_draft", Destructive = false, OpenWorld = false)]
@@ -426,20 +440,23 @@ public sealed class MailTools(EwsContext ews)
 
         // Outlook on the web keeps the signature in the mailbox (where tools like AutoSignature.NET write it);
         // Exchange does not add it to drafts created via EWS.
-        UserConfiguration options;
-        try
+        var signature = await cache.GetOrCreateAsync("signature:" + ews.GrantId + "|" + ews.Mailbox, async entry =>
         {
-            options = await UserConfiguration.Bind(ews.Service, "OWA.UserOptions", ews.WellKnown(WellKnownFolderName.Root),
-                UserConfigurationProperties.Dictionary);
-        }
-        catch (ServiceResponseException e) when (e.ErrorCode == ServiceError.ErrorItemNotFound)
-        {
-            throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
-        }
-        var signature =
-            options.Dictionary.TryGetValue("signaturehtml", out var html) && html is string h && h.Trim().Length > 0 ? h
-            : options.Dictionary.TryGetValue("signaturetext", out var text) && text is string t && t.Trim().Length > 0 ? CreateBody(t, "text").Text
-            : throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            UserConfiguration options;
+            try
+            {
+                options = await UserConfiguration.Bind(ews.Service, "OWA.UserOptions", ews.WellKnown(WellKnownFolderName.Root),
+                    UserConfigurationProperties.Dictionary);
+            }
+            catch (ServiceResponseException e) when (e.ErrorCode == ServiceError.ErrorItemNotFound)
+            {
+                return null;
+            }
+            return options.Dictionary.TryGetValue("signaturehtml", out var html) && html is string h && h.Trim().Length > 0 ? h
+                : options.Dictionary.TryGetValue("signaturetext", out var text) && text is string t && t.Trim().Length > 0 ? CreateBody(t, "text").Text
+                : null;
+        }) ?? throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
         return new MessageBody(BodyType.HTML, result.Text + "<br>" + signature);
     }
 
@@ -509,9 +526,11 @@ public sealed class MailTools(EwsContext ews)
     {
         await ews.UseMailboxAsync(mailbox);
         if (isRead is null && flag is null) throw new McpException("Nothing to change: specify isRead and/or flag.");
-        foreach (var id in ids)
+        // One GetItem and one UpdateItem call for all ids instead of two calls per item.
+        var bound = await ews.Service.BindToItems(ids.Select(i => new ItemId(i)), new PropertySet(BasePropertySet.IdOnly, EmailMessageSchema.IsRead, ItemSchema.Flag));
+        var messages = bound.Where(r => r.Result == ServiceResult.Success).Select(r => r.Item).OfType<EmailMessage>().ToList();
+        foreach (var message in messages)
         {
-            var message = await EmailMessage.Bind(ews.Service, new ItemId(id), new PropertySet(BasePropertySet.IdOnly, EmailMessageSchema.IsRead, ItemSchema.Flag));
             if (isRead is not null) message.IsRead = isRead.Value;
             if (flag is not null)
             {
@@ -525,8 +544,9 @@ public sealed class MailTools(EwsContext ews)
                     },
                 };
             }
-            await message.Update(ConflictResolutionMode.AutoResolve);
         }
-        return $"Updated {ids.Length} item(s).";
+        var updated = messages.Count == 0 ? [] : (await ews.Service.UpdateItems(messages, null!, ConflictResolutionMode.AutoResolve, null, null)).ToList();
+        var failed = ids.Length - updated.Count(r => r.Result == ServiceResult.Success);
+        return failed == 0 ? $"Updated {ids.Length} item(s)." : $"Updated {ids.Length - failed} item(s); {failed} could not be updated (not found or not a mail).";
     }
 }

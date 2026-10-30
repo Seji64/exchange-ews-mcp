@@ -208,6 +208,68 @@ public sealed class EwsToolTests : IAsyncLifetime
         Assert.Equal("techmaster@contoso.com", _ews.AnchorMailboxes.Last());
     }
 
+    [Theory]
+    [InlineData(false, "New text", true)]
+    [InlineData(true, "Old quoted text", null)]
+    public async Task Read_mail_returns_only_the_new_part_unless_history_is_requested(bool includeQuotedHistory, string expected, bool? omitted)
+    {
+        _ews.Responses["GetItem"] = """
+            <m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:Items><t:Message><t:ItemId Id="AAMk1" ChangeKey="C" /><t:Subject>Re: Plan</t:Subject>
+                <t:Body BodyType="Text">New text
+
+            From: Bob
+            Old quoted text with a lot of history</t:Body>
+                <t:UniqueBody BodyType="Text">New text</t:UniqueBody>
+              </t:Message></m:Items>
+            </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
+            """;
+
+        var result = await CallToolAsync("read_mail", new { id = "AAMk1", includeQuotedHistory });
+
+        var json = JsonDocument.Parse(result.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement;
+        Assert.Contains(expected, json.GetProperty("body").GetString());
+        Assert.Equal(omitted, json.TryGetProperty("quotedHistoryOmitted", out var o) ? o.GetBoolean() : null);
+    }
+
+    [Fact]
+    public async Task Mark_mail_uses_one_get_and_one_update_for_all_items()
+    {
+        string Messages(string op, string inner, string tail = "") => string.Concat(new[] { "A1", "A2", "A3" }.Select(id =>
+            $"<m:{op}ResponseMessage ResponseClass=\"Success\"><m:ResponseCode>NoError</m:ResponseCode><m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"C\" />{inner}</t:Message></m:Items>{tail}</m:{op}ResponseMessage>"));
+        _ews.Responses["GetItem"] = $"<m:GetItemResponse><m:ResponseMessages>{Messages("GetItem", "<t:IsRead>false</t:IsRead>")}</m:ResponseMessages></m:GetItemResponse>";
+        _ews.Responses["UpdateItem"] = $"<m:UpdateItemResponse><m:ResponseMessages>{Messages("UpdateItem", "", "<m:ConflictResults><t:Count>0</t:Count></m:ConflictResults>")}</m:ResponseMessages></m:UpdateItemResponse>";
+
+        var result = await CallToolAsync("mark_mail", new { ids = new[] { "A1", "A2", "A3" }, isRead = true });
+
+        Assert.Equal("Updated 3 item(s).", result.GetProperty("content")[0].GetProperty("text").GetString());
+        Assert.Equal(2, _ews.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Folder_paths_are_resolved_once()
+    {
+        _ews.Responses["FindFolder"] = """
+            <m:FindFolderResponse><m:ResponseMessages><m:FindFolderResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:RootFolder TotalItemsInView="1" IncludesLastItemInRange="true"><t:Folders><t:Folder><t:FolderId Id="FOLDER1" ChangeKey="C" /></t:Folder></t:Folders></m:RootFolder>
+            </m:FindFolderResponseMessage></m:ResponseMessages></m:FindFolderResponse>
+            """;
+        _ews.Responses["FindItem"] = """
+            <m:FindItemResponse><m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:RootFolder IndexedPagingOffset="0" TotalItemsInView="0" IncludesLastItemInRange="true"><t:Items /></m:RootFolder>
+            </m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>
+            """;
+
+        await CallToolAsync("search_mail", new { folder = "Inbox/Projects" });
+        await CallToolAsync("search_mail", new { folder = "Inbox/Projects" });
+
+        Assert.Single(_ews.Requests, r => r.Body.Contains(":FindFolder "));
+        Assert.All(_ews.Requests.Where(r => r.Body.Contains(":FindItem ")), r => Assert.Contains("FOLDER1", r.Body));
+    }
+
     [Fact]
     public async Task Ews_errors_are_reported_to_the_model()
     {

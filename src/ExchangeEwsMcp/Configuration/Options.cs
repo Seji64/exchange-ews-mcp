@@ -119,10 +119,10 @@ public sealed class ExchangeOptions
     public AccessLevel AccessLevel { get; set; } = AccessLevel.Full;
 
     /// <summary>Upper bound for list/search results.</summary>
-    public int MaxResults { get; set; } = 50;
+    public int MaxResults { get; set; } = 25;
 
     /// <summary>Maximum number of characters of a message body returned to the model.</summary>
-    public int MaxBodyLength { get; set; } = 20000;
+    public int MaxBodyLength { get; set; } = 8000;
 
     /// <summary>Maximum attachment size (bytes) the server will download and return.</summary>
     public int MaxAttachmentBytes { get; set; } = 5 * 1024 * 1024;

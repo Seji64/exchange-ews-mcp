@@ -280,8 +280,8 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `Exchange:TimeZone` | `Europe/Berlin` | IANA or Windows time zone for interpreting and rendering dates |
 | `Exchange:AllowSend` | `false` | Enables the sending tools and parameters |
 | `Exchange:AccessLevel` | `Full` | `ReadOnly`, `NoDelete` or `Full` (see [Guard rails](#guard-rails)) |
-| `Exchange:MaxResults` | `50` | Upper bound for list/search results |
-| `Exchange:MaxBodyLength` | `20000` | Characters of a message body returned to the model |
+| `Exchange:MaxResults` | `25` | Upper bound for search results (default per search: 10) |
+| `Exchange:MaxBodyLength` | `8000` | Characters of a message body returned to the model (`read_mail` returns only the new part of a message unless `includeQuotedHistory` is set) |
 | `Exchange:MaxAttachmentBytes` | `5242880` | Largest attachment that is downloaded or added |
 | `Exchange:TraceEws` | `false` | Logs EWS SOAP traffic at debug level (contains mail content) |
 

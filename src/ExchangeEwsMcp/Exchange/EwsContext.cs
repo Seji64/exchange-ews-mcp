@@ -115,6 +115,16 @@ public sealed class EwsContext(
 
         if (TryWellKnown(folder, out var wellKnown)) return WellKnown(wellKnown);
 
+        // Paths and names cost one EWS call per segment; folder ids of a mailbox are stable, so remember them.
+        var key = "folder:" + (_mailbox ?? GrantId) + "|" + folder.ToLowerInvariant();
+        if (cache.TryGetValue(key, out FolderId? cached) && cached is not null) return cached;
+        var resolved = await FindFolderAsync(folder);
+        cache.Set(key, resolved, TimeSpan.FromMinutes(30));
+        return resolved;
+    }
+
+    private async Task<FolderId> FindFolderAsync(string folder)
+    {
         if (folder.Contains('/'))
         {
             var segments = folder.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
@@ -138,7 +148,7 @@ public sealed class EwsContext(
         if (byName.Folders.Count == 1) return byName.Folders[0].Id;
         if (byName.Folders.Count > 1)
         {
-            throw new McpException($"Folder name '{folder}' is ambiguous; use a path like 'Inbox/{folder}' or the folder id from list_folders.");
+            throw new McpException($"Folder name '{folder}' is ambiguous; use a path like 'Inbox/{folder}' or the path from list_folders.");
         }
 
         // Treat as an EWS folder id.

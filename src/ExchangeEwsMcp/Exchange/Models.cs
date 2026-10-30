@@ -7,7 +7,8 @@ public sealed record PersonInfo(string? Name, string? Email)
     public override string ToString() => Name is null ? Email ?? "" : $"{Name} <{Email}>";
 }
 
-public sealed record FolderInfo(string Id, string Name, string Path, int TotalCount, int? UnreadCount, int ChildFolderCount);
+// Folders are addressed by path in the other tools; ids would only cost context.
+public sealed record FolderInfo(string Path, int TotalCount, int? UnreadCount, int ChildFolderCount);
 
 public sealed record MailSummary(
     string Id,
@@ -16,9 +17,9 @@ public sealed record MailSummary(
     string? To,
     string? Received,
     bool IsRead,
-    bool HasAttachments,
+    bool? HasAttachments,
     string? Importance,
-    bool IsDraft,
+    bool? IsDraft,
     string? Preview);
 
 public sealed record AttachmentInfo(int Index, string Id, string Name, string? ContentType, int Size, bool IsInline, bool IsItemAttachment);
@@ -40,6 +41,7 @@ public sealed record MailDetails(
     string BodyType,
     string Body,
     bool BodyTruncated,
+    bool? QuotedHistoryOmitted,
     IReadOnlyList<AttachmentInfo> Attachments);
 
 public sealed record SearchResult<T>(int TotalCount, bool MoreAvailable, IReadOnlyList<T> Items);
