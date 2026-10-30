@@ -16,6 +16,9 @@ public sealed class MailTools(EwsContext ews)
     internal const string MailboxDescription =
         "Optional shared or delegated mailbox (e-mail address, alias or name). Omit for the user's own mailbox.";
 
+    private const string SignatureDescription =
+        "Append the Outlook signature (from Outlook on the web) below the text. Ask the user whether to include it before creating the draft.";
+
     internal const string ItemMailboxDescription =
         "Shared or delegated mailbox the item is in (e-mail address, alias or name). Omit for the user's own mailbox.";
 
@@ -268,6 +271,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("Cc recipients.")] string[]? cc = null,
         [Description("Bcc recipients.")] string[]? bcc = null,
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
+        [Description(SignatureDescription)] bool includeSignature = false,
         [Description("'low', 'normal' (default) or 'high'.")] string importance = "normal",
         [Description("Optional shared mailbox (e-mail address, alias or name) to create the draft in (it is sent from that mailbox).")] string? mailbox = null)
     {
@@ -275,7 +279,7 @@ public sealed class MailTools(EwsContext ews)
         var message = new EmailMessage(ews.Service)
         {
             Subject = subject,
-            Body = CreateBody(body, bodyFormat),
+            Body = await BodyAsync(body, bodyFormat, includeSignature),
             Importance = ParseImportance(importance),
         };
         message.ToRecipients.AddRange(await ResolveRecipientsAsync(ews.Service, to));
@@ -296,12 +300,13 @@ public sealed class MailTools(EwsContext ews)
         [Description("Reply text placed above the quoted original.")] string body,
         [Description("Reply to all recipients. Default false.")] bool replyAll = false,
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
+        [Description(SignatureDescription)] bool includeSignature = false,
         [Description("Optional shared mailbox (e-mail address, alias or name) the original mail is in (draft is saved there).")] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
         var original = await EmailMessage.Bind(ews.Service, new ItemId(id));
         var reply = original.CreateReply(replyAll);
-        reply.BodyPrefix = CreateBody(body, bodyFormat);
+        reply.BodyPrefix = await BodyAsync(body, bodyFormat, includeSignature);
         var draft = await reply.Save(ews.WellKnown(WellKnownFolderName.Drafts));
         await draft.Load(new PropertySet(BasePropertySet.IdOnly, ItemSchema.Subject));
         return new DraftResult(draft.Id.UniqueId!, draft.Subject, "Drafts", DraftSavedMessage());
@@ -315,6 +320,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("Text placed above the forwarded message.")] string? body = null,
         [Description("Cc recipients.")] string[]? cc = null,
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
+        [Description(SignatureDescription)] bool includeSignature = false,
         [Description("Optional shared mailbox (e-mail address, alias or name) the original mail is in (draft is saved there).")] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
@@ -324,7 +330,7 @@ public sealed class MailTools(EwsContext ews)
         forward.CcRecipients.AddRange(await ResolveRecipientsAsync(ews.Service, cc));
         if (!string.IsNullOrEmpty(body))
         {
-            forward.BodyPrefix = CreateBody(body, bodyFormat);
+            forward.BodyPrefix = await BodyAsync(body, bodyFormat, includeSignature);
         }
         var draft = await forward.Save(ews.WellKnown(WellKnownFolderName.Drafts));
         await draft.Load(new PropertySet(BasePropertySet.IdOnly, ItemSchema.Subject));
@@ -345,13 +351,14 @@ public sealed class MailTools(EwsContext ews)
         [Description("New Cc recipients.")] string[]? cc = null,
         [Description("New Bcc recipients.")] string[]? bcc = null,
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
+        [Description(SignatureDescription)] bool includeSignature = false,
         [Description("'low', 'normal' or 'high'.")] string? importance = null,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
         var draft = await BindDraftAsync(id);
         if (subject is not null) draft.Subject = subject;
-        if (body is not null) draft.Body = CreateBody(body, bodyFormat);
+        if (body is not null) draft.Body = await BodyAsync(body, bodyFormat, includeSignature);
         if (importance is not null) draft.Importance = ParseImportance(importance);
         if (to is not null) { draft.ToRecipients.Clear(); draft.ToRecipients.AddRange(await ResolveRecipientsAsync(ews.Service, to)); }
         if (cc is not null) { draft.CcRecipients.Clear(); draft.CcRecipients.AddRange(await ResolveRecipientsAsync(ews.Service, cc)); }
@@ -410,6 +417,22 @@ public sealed class MailTools(EwsContext ews)
         var draft = await BindDraftAsync(id);
         await draft.Delete(DeleteMode.MoveToDeletedItems);
         return "Draft moved to Deleted Items.";
+    }
+
+    private async Task<MessageBody> BodyAsync(string? body, string bodyFormat, bool includeSignature)
+    {
+        var result = CreateBody(body, bodyFormat);
+        if (!includeSignature) return result;
+
+        // Outlook on the web keeps the signature in the mailbox (where tools like AutoSignature.NET write it);
+        // Exchange does not add it to drafts created via EWS.
+        var options = await UserConfiguration.Bind(ews.Service, "OWA.UserOptions", ews.WellKnown(WellKnownFolderName.Root),
+            UserConfigurationProperties.Dictionary);
+        var signature =
+            options.Dictionary.TryGetValue("signaturehtml", out var html) && html is string h && h.Trim().Length > 0 ? h
+            : options.Dictionary.TryGetValue("signaturetext", out var text) && text is string t && t.Trim().Length > 0 ? CreateBody(t, "text").Text
+            : throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
+        return new MessageBody(BodyType.HTML, result.Text + "<br>" + signature);
     }
 
     private async Task<EmailMessage> BindDraftAsync(string id)

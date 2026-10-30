@@ -65,6 +65,10 @@ the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth
 | Automatic replies | `get_out_of_office`, `set_out_of_office` |
 | Sending (only with `Exchange:AllowSend=true`) | `send_draft`, `send_meeting_invitations` |
 
+Drafts can get the user's Outlook signature (`includeSignature`). It is read from the Outlook on the web settings in
+the mailbox (`OWA.UserOptions`), because Exchange doesn't add signatures to drafts created via EWS. The server tells the
+model to ask the user first.
+
 With `AllowSend=false` (the default), the parameters that would send something are rejected: `sendInvitations`,
 `sendUpdates`, `sendResponse`, and cancelling a meeting you organize.
 

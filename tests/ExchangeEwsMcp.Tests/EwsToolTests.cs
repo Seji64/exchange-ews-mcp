@@ -107,6 +107,37 @@ public sealed class EwsToolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Draft_gets_the_outlook_on_the_web_signature_when_requested()
+    {
+        _ews.Responses["GetUserConfiguration"] = """
+            <m:GetUserConfigurationResponse><m:ResponseMessages><m:GetUserConfigurationResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:UserConfiguration>
+                <t:UserConfigurationName Name="OWA.UserOptions"><t:DistinguishedFolderId Id="root" /></t:UserConfigurationName>
+                <t:ItemId Id="AAMkCfg" ChangeKey="C" />
+                <t:Dictionary><t:DictionaryEntry>
+                  <t:DictionaryKey><t:Type>String</t:Type><t:Value>signaturehtml</t:Value></t:DictionaryKey>
+                  <t:DictionaryValue><t:Type>String</t:Type><t:Value>&lt;b&gt;Alice Example&lt;/b&gt;</t:Value></t:DictionaryValue>
+                </t:DictionaryEntry></t:Dictionary>
+              </m:UserConfiguration>
+            </m:GetUserConfigurationResponseMessage></m:ResponseMessages></m:GetUserConfigurationResponse>
+            """;
+        _ews.Responses["CreateItem"] = """
+            <m:CreateItemResponse><m:ResponseMessages><m:CreateItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:Items><t:Message><t:ItemId Id="AAMkDraft" ChangeKey="C" /></t:Message></m:Items>
+            </m:CreateItemResponseMessage></m:ResponseMessages></m:CreateItemResponse>
+            """;
+
+        var result = await CallToolAsync("create_draft", new { subject = "Hi", body = "Hello Bob", to = new[] { "bob@contoso.com" }, includeSignature = true });
+
+        Assert.False(result.TryGetProperty("isError", out var isError) && isError.GetBoolean(), result.ToString());
+        var createItem = _ews.Requests.Single(r => r.Body.Contains(":CreateItem ")).Body;
+        Assert.Contains("Hello Bob", createItem);
+        Assert.Contains("&lt;b&gt;Alice Example&lt;/b&gt;", createItem);
+    }
+
+    [Fact]
     public async Task Ews_errors_are_reported_to_the_model()
     {
         _ews.Responses["GetItem"] = """

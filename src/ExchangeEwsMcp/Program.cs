@@ -105,7 +105,9 @@ var mcp = builder.Services.AddMcpServer(o =>
             AccessLevel.ReadOnly => "This server is read-only: it can search and read, but not create or change anything.\n",
             AccessLevel.NoDelete => "Deleting is disabled on this server.\n",
             _ => "",
-        } + (exchangeOptions.AllowSend
+        } + (exchangeOptions.AccessLevel == AccessLevel.ReadOnly ? ""
+            : "Before creating a draft, ask the user whether their Outlook signature should be appended (includeSignature).\n")
+          + (exchangeOptions.AllowSend
             ? """
               Access to the user's on-premises Exchange mailbox (mail, calendar, address book, automatic replies).
               Mail is created as drafts. Sending (send_draft, send_meeting_invitations, sendInvitations/sendUpdates/sendResponse)
