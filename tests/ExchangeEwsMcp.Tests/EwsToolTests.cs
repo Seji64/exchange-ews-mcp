@@ -86,11 +86,24 @@ public sealed class EwsToolTests : IAsyncLifetime
             </m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>
             """;
 
-        await CallToolAsync("search_mail", new { mailbox = "techmaster@contoso.com" });
+        _ews.Responses["ResolveNames"] = """
+            <m:ResolveNamesResponse><m:ResponseMessages><m:ResolveNamesResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:ResolutionSet TotalItemsInView="1" IncludesLastItemInRange="true"><t:Resolution><t:Mailbox>
+                <t:Name>Techmaster</t:Name><t:EmailAddress>techmaster@contoso.com</t:EmailAddress>
+                <t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType>
+              </t:Mailbox></t:Resolution></m:ResolutionSet>
+            </m:ResolveNamesResponseMessage></m:ResponseMessages></m:ResolveNamesResponse>
+            """;
+
+        // The model passes the alias; it is resolved to the SMTP address once.
+        var first = await CallToolAsync("search_mail", new { mailbox = "techmaster" });
+        await CallToolAsync("search_mail", new { mailbox = "techmaster" });
         await CallToolAsync("search_mail", new { });
 
-        Assert.Equal(["techmaster@contoso.com", ""], _ews.AnchorMailboxes);
-        Assert.Contains("<t:EmailAddress>techmaster@contoso.com</t:EmailAddress>", _ews.Requests.First().Body);
+        Assert.False(first.TryGetProperty("isError", out var isError) && isError.GetBoolean(), first.ToString());
+        Assert.Equal(["", "techmaster@contoso.com", "techmaster@contoso.com", ""], _ews.AnchorMailboxes);
+        Assert.Contains("<t:EmailAddress>techmaster@contoso.com</t:EmailAddress>", _ews.Requests.ElementAt(1).Body);
     }
 
     [Fact]

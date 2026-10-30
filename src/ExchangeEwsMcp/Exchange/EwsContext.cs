@@ -37,7 +37,33 @@ public sealed class EwsContext(
     /// Routes the following EWS calls of this request to the given mailbox via X-AnchorMailbox,
     /// so Exchange opens e.g. a shared mailbox on its own server. Null means the user's own mailbox.
     /// </summary>
-    public void UseMailbox(string? mailbox) => _mailbox = string.IsNullOrWhiteSpace(mailbox) ? null : mailbox.Trim();
+    public async Task UseMailboxAsync(string? mailbox)
+    {
+        _mailbox = null;
+        if (string.IsNullOrWhiteSpace(mailbox)) return;
+        mailbox = mailbox.Trim();
+
+        // X-AnchorMailbox and FolderId need an SMTP address; models often pass a name or alias instead.
+        var key = "mailbox:" + mailbox.ToLowerInvariant();
+        if (!cache.TryGetValue(key, out string? smtp))
+        {
+            var matches = (await Service.ResolveName(mailbox, ResolveNameSearchLocation.DirectoryOnly, false))
+                .Where(m => !string.IsNullOrEmpty(m.Mailbox.Address)).ToList();
+            smtp = (matches.FirstOrDefault(m => string.Equals(m.Mailbox.Address, mailbox, StringComparison.OrdinalIgnoreCase))
+                ?? (matches.Count == 1 ? matches[0] : null))?.Mailbox.Address;
+            if (smtp is null)
+            {
+                throw new McpException(matches.Count == 0
+                    ? $"Mailbox '{mailbox}' was not found in the address book."
+                    : $"Mailbox '{mailbox}' is ambiguous: {string.Join("; ", matches.Take(10).Select(m => $"{m.Mailbox.Name} <{m.Mailbox.Address}>"))}");
+            }
+            cache.Set(key, smtp, TimeSpan.FromHours(4));
+        }
+        _mailbox = smtp;
+    }
+
+    /// <summary>SMTP address of the mailbox selected with <see cref="UseMailboxAsync"/>, or null for the user's own.</summary>
+    public string? Mailbox => _mailbox;
 
     /// <summary>Primary SMTP address of the signed-in user (resolved via EWS, cached).</summary>
     public async Task<string> GetCurrentUserSmtpAsync()
@@ -64,26 +90,26 @@ public sealed class EwsContext(
         return smtp;
     }
 
-    public FolderId WellKnown(WellKnownFolderName name, string? mailbox) =>
-        string.IsNullOrWhiteSpace(mailbox) ? new FolderId(name) : new FolderId(name, new Mailbox(mailbox.Trim()));
+    public FolderId WellKnown(WellKnownFolderName name) =>
+        _mailbox is null ? new FolderId(name) : new FolderId(name, new Mailbox(_mailbox));
 
     /// <summary>
     /// Resolves a folder given as well-known name (inbox, sentitems, drafts, deleteditems, junkemail, archive, ...),
     /// as path below the mailbox root ("Inbox/Projects/Alpha"), as display name, or as EWS folder id.
     /// </summary>
-    public async Task<FolderId> ResolveFolderAsync(string? folder, string? mailbox, WellKnownFolderName defaultFolder)
+    public async Task<FolderId> ResolveFolderAsync(string? folder, WellKnownFolderName defaultFolder)
     {
-        if (string.IsNullOrWhiteSpace(folder)) return WellKnown(defaultFolder, mailbox);
+        if (string.IsNullOrWhiteSpace(folder)) return WellKnown(defaultFolder);
         folder = folder.Trim();
 
-        if (TryWellKnown(folder, out var wellKnown)) return WellKnown(wellKnown, mailbox);
+        if (TryWellKnown(folder, out var wellKnown)) return WellKnown(wellKnown);
 
         if (folder.Contains('/'))
         {
             var segments = folder.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            var current = TryWellKnown(segments[0], out var first) ? WellKnown(first, mailbox) : null;
+            var current = TryWellKnown(segments[0], out var first) ? WellKnown(first) : null;
             var start = current is null ? 0 : 1;
-            current ??= WellKnown(WellKnownFolderName.MsgFolderRoot, mailbox);
+            current ??= WellKnown(WellKnownFolderName.MsgFolderRoot);
             for (var i = start; i < segments.Length; i++)
             {
                 var found = await Service.FindFolders(current,
@@ -95,7 +121,7 @@ public sealed class EwsContext(
             return current;
         }
 
-        var byName = await Service.FindFolders(WellKnown(WellKnownFolderName.MsgFolderRoot, mailbox),
+        var byName = await Service.FindFolders(WellKnown(WellKnownFolderName.MsgFolderRoot),
             new SearchFilter.IsEqualTo(FolderSchema.DisplayName, folder),
             new FolderView(5) { Traversal = FolderTraversal.Deep, PropertySet = new PropertySet(BasePropertySet.IdOnly) });
         if (byName.Folders.Count == 1) return byName.Folders[0].Id;

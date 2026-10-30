@@ -18,7 +18,7 @@ public sealed class SendTools(EwsContext ews)
     public async Task<string> SendDraft([Description("Draft id.")] string id,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         ews.EnsureSendAllowed("send_draft");
         var draft = await EmailMessage.Bind(ews.Service, new ItemId(id), new PropertySet(BasePropertySet.IdOnly,
             ItemSchema.IsDraft, ItemSchema.Subject, EmailMessageSchema.ToRecipients, EmailMessageSchema.CcRecipients,
@@ -41,7 +41,7 @@ public sealed class SendTools(EwsContext ews)
     public async Task<string> SendMeetingInvitations([Description("Event id.")] string id,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         ews.EnsureSendAllowed("send_meeting_invitations");
         var appointment = await Appointment.Bind(ews.Service, new ItemId(id), new PropertySet(BasePropertySet.IdOnly,
             ItemSchema.Subject, AppointmentSchema.RequiredAttendees, AppointmentSchema.OptionalAttendees, AppointmentSchema.MyResponseType));

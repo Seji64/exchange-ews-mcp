@@ -24,13 +24,13 @@ public sealed class CalendarTools(EwsContext ews)
         [Description("Maximum number of events (default 50).")] int maxResults = 50,
         [Description(MailTools.MailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         var from = start is null ? ews.Now.Date : ews.ParseDateTime(start, nameof(start));
         var to = end is null ? from.AddDays(7) : ews.ParseDateTime(end, nameof(end));
         if (to <= from) throw new McpException("'end' must be after 'start'.");
 
         var view = new CalendarView(from, to, Math.Clamp(maxResults, 1, Math.Max(ews.Options.MaxResults, 100))) { PropertySet = EventSummaryProperties };
-        var results = await ews.Service.FindAppointments(ews.WellKnown(WellKnownFolderName.Calendar, mailbox), view);
+        var results = await ews.Service.FindAppointments(ews.WellKnown(WellKnownFolderName.Calendar), view);
         return results.Items.Select(a => new EventSummary(
             a.Id.UniqueId!,
             Try(() => a.Subject),
@@ -51,7 +51,7 @@ public sealed class CalendarTools(EwsContext ews)
     public async Task<EventDetails> GetEvent([Description("Event id from list_events.")] string id,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body) { RequestedBodyType = BodyType.Text };
         var a = await Appointment.Bind(ews.Service, new ItemId(id), props);
         return ToDetails(a);
@@ -168,7 +168,7 @@ public sealed class CalendarTools(EwsContext ews)
         [Description("Send invitations to attendees immediately (requires sending to be enabled on the server).")] bool sendInvitations = false,
         [Description(MailTools.MailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         if (sendInvitations) ews.EnsureSendAllowed("meeting invitations");
 
         var appointment = new Appointment(ews.Service)
@@ -187,7 +187,7 @@ public sealed class CalendarTools(EwsContext ews)
         foreach (var a in await ResolveRecipientsAsync(ews.Service, requiredAttendees)) appointment.RequiredAttendees.Add(new Attendee(a));
         foreach (var a in await ResolveRecipientsAsync(ews.Service, optionalAttendees)) appointment.OptionalAttendees.Add(new Attendee(a));
 
-        await appointment.Save(ews.WellKnown(WellKnownFolderName.Calendar, mailbox),
+        await appointment.Save(ews.WellKnown(WellKnownFolderName.Calendar),
             sendInvitations ? SendInvitationsMode.SendToAllAndSaveCopy : SendInvitationsMode.SendToNone);
         return await GetEvent(appointment.Id.UniqueId!, mailbox);
     }
@@ -210,7 +210,7 @@ public sealed class CalendarTools(EwsContext ews)
         [Description("Send the update to attendees (requires sending to be enabled on the server).")] bool sendUpdates = false,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         if (sendUpdates) ews.EnsureSendAllowed("meeting updates");
 
         var appointment = await Appointment.Bind(ews.Service, new ItemId(id));
@@ -246,7 +246,7 @@ public sealed class CalendarTools(EwsContext ews)
         [Description("Optional cancellation message for attendees.")] string? cancellationMessage = null,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         var appointment = await Appointment.Bind(ews.Service, new ItemId(id), new PropertySet(BasePropertySet.IdOnly,
             AppointmentSchema.IsMeeting, AppointmentSchema.MyResponseType, AppointmentSchema.RequiredAttendees, AppointmentSchema.OptionalAttendees));
         var isOrganizedMeeting = appointment.IsMeeting
@@ -279,7 +279,7 @@ public sealed class CalendarTools(EwsContext ews)
         [Description("Optional message to the organizer (only with sendResponse=true).")] string? message = null,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
-        ews.UseMailbox(mailbox);
+        await ews.UseMailboxAsync(mailbox);
         if (sendResponse) ews.EnsureSendAllowed("meeting response");
 
         var kind = response.ToLowerInvariant();
