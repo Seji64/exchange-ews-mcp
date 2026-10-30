@@ -221,19 +221,8 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
-        var item = await Item.Bind(ews.Service, new ItemId(itemId), new PropertySet(BasePropertySet.IdOnly, ItemSchema.Attachments,
-            ItemSchema.WebClientReadFormQueryString));
+        var (item, match) = await ews.FindAttachmentAsync(itemId, attachment);
         var download = ews.OwaLink(Try(() => item.WebClientReadFormQueryString)) is { } link ? $" To open or download it: {link}" : "";
-        var attachments = item.Attachments.ToList();
-        var match = (int.TryParse(attachment, out var index) && index >= 0 && index < attachments.Count ? attachments[index] : null)
-            ?? attachments.FirstOrDefault(a => a.Id == attachment)
-            ?? attachments.FirstOrDefault(a => string.Equals(a.Name, attachment, StringComparison.OrdinalIgnoreCase))
-            ?? throw new McpException($"Attachment '{attachment}' not found. Available: {string.Join(", ", attachments.Select((a, i) => $"[{i}] {a.Name}"))}");
-
-        if (match.Size > ews.Options.MaxAttachmentBytes)
-        {
-            throw new McpException($"Attachment '{match.Name}' is {match.Size} bytes, which exceeds the limit of {ews.Options.MaxAttachmentBytes} bytes.");
-        }
 
         if (match is ItemAttachment itemAttachment)
         {
@@ -285,6 +274,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
     }
 
     private const int MaxImageBytes = 512 * 1024;
+
 
     private static CallToolResult TextResult(string text) => new() { Content = [new TextContentBlock { Text = text }] };
 

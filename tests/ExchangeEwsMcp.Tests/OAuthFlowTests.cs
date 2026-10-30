@@ -67,6 +67,7 @@ public sealed partial class OAuthFlowTests : IDisposable
         Assert.Contains("create_draft", toolNames);
         Assert.Contains("list_events", toolNames);
         Assert.DoesNotContain("send_draft", toolNames);
+        Assert.DoesNotContain("prepare_attachment_download", toolNames);
 
         // Refresh rotates the refresh token.
         var refreshed = await TokenRequestAsync(new()

@@ -58,6 +58,23 @@ public sealed class EwsContext(
         _mailbox = smtp;
     }
 
+    /// <summary>Finds an attachment of an item by index, file name or attachment id, within the size limit.</summary>
+    public async Task<(Item Item, Attachment Attachment)> FindAttachmentAsync(string itemId, string attachment)
+    {
+        var item = await Item.Bind(Service, new ItemId(itemId), new PropertySet(BasePropertySet.IdOnly, ItemSchema.Attachments,
+            ItemSchema.WebClientReadFormQueryString));
+        var attachments = item.Attachments.ToList();
+        var match = (int.TryParse(attachment, out var index) && index >= 0 && index < attachments.Count ? attachments[index] : null)
+            ?? attachments.FirstOrDefault(a => a.Id == attachment)
+            ?? attachments.FirstOrDefault(a => string.Equals(a.Name, attachment, StringComparison.OrdinalIgnoreCase))
+            ?? throw new McpException($"Attachment '{attachment}' not found. Available: {string.Join(", ", attachments.Select((a, i) => $"[{i}] {a.Name}"))}");
+        if (match.Size > Options.MaxAttachmentBytes)
+        {
+            throw new McpException($"Attachment '{match.Name}' is {match.Size} bytes, which exceeds the limit of {Options.MaxAttachmentBytes} bytes.");
+        }
+        return (item, match);
+    }
+
     /// <summary>
     /// Link that opens an item in Outlook on the web (from WebClientReadFormQueryString), e.g. so the user can
     /// download an attachment without its content going through the model. Items of other mailboxes open via

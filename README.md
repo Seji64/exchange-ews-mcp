@@ -83,6 +83,11 @@ the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth
 or download an attachment yourself, so the file doesn't have to go through the model's context. (Open WebUI doesn't
 offer non-image files from MCP tools as downloads.)
 
+If [Fileshed](https://github.com/Fade78/Fileshed) is installed in Open WebUI, set `Exchange:EnableDownloadLinks=true`.
+This adds `prepare_attachment_download`: the attachment is held for 10 minutes under a single-use URL of the MCP server,
+Fileshed fetches it from there and offers it to the user as a download, without the content passing through the model.
+The URL needs no sign-in, so the MCP server must only be reachable from Open WebUI (as in the Passthrough setup).
+
 Drafts can get the user's Outlook signature (`includeSignature`). It is read from the Outlook on the web settings in
 the mailbox (`OWA.UserOptions`), because Exchange doesn't add signatures to drafts created via EWS. The server tells the
 model to ask the user first.
@@ -287,6 +292,7 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `Exchange:MaxResults` | `25` | Upper bound for search results (default per search: 10) |
 | `Exchange:MaxBodyLength` | `8000` | Characters of a message body returned to the model (`read_mail` returns only the new part of a message unless `includeQuotedHistory` is set) |
 | `Exchange:MaxAttachmentBytes` | `5242880` | Largest attachment that is downloaded or added |
+| `Exchange:EnableDownloadLinks` | `false` | Adds `prepare_attachment_download` (single-use URLs for a file tool such as Fileshed) |
 | `Exchange:SignatureCacheDuration` | `00:10:00` | How long the Outlook signature is cached per user and mailbox; `00:00:00` reads it for every draft |
 | `Exchange:TraceEws` | `false` | Logs EWS SOAP traffic at debug level (contains mail content) |
 

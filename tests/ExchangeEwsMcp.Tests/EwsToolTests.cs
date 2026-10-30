@@ -16,6 +16,7 @@ public sealed class EwsToolTests : IAsyncLifetime
         _factory = new ServerFactory();
         _factory.Settings["Exchange:EwsUrl"] = _ews.Url;
         _factory.Settings["Exchange:TimeZone"] = "Europe/Berlin";
+        _factory.Settings["Exchange:EnableDownloadLinks"] = "true";
         _http = _factory.CreateClient();
 
         _accessToken = _factory.CreateAccessToken();
@@ -278,6 +279,38 @@ public sealed class EwsToolTests : IAsyncLifetime
 
         Assert.Single(_ews.Requests, r => r.Body.Contains(":FindFolder "));
         Assert.All(_ews.Requests.Where(r => r.Body.Contains(":FindItem ")), r => Assert.Contains("FOLDER1", r.Body));
+    }
+
+    [Fact]
+    public async Task Attachment_download_url_serves_the_file_once()
+    {
+        _ews.Responses["GetItem"] = """
+            <m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:Items><t:Message><t:ItemId Id="AAMk1" ChangeKey="C" /><t:HasAttachments>true</t:HasAttachments>
+                <t:Attachments><t:FileAttachment><t:AttachmentId Id="ATT1" /><t:Name>AB.pdf</t:Name>
+                  <t:ContentType>application/pdf</t:ContentType><t:Size>5</t:Size></t:FileAttachment></t:Attachments>
+              </t:Message></m:Items>
+            </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
+            """;
+        _ews.Responses["GetAttachment"] = """
+            <m:GetAttachmentResponse><m:ResponseMessages><m:GetAttachmentResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:Attachments><t:FileAttachment><t:AttachmentId Id="ATT1" /><t:Name>AB.pdf</t:Name>
+                <t:ContentType>application/pdf</t:ContentType><t:Content>JVBERi0=</t:Content></t:FileAttachment></m:Attachments>
+            </m:GetAttachmentResponseMessage></m:ResponseMessages></m:GetAttachmentResponse>
+            """;
+
+        var result = await CallToolAsync("prepare_attachment_download", new { itemId = "AAMk1", attachment = "AB.pdf" });
+
+        var text = result.GetProperty("content")[0].GetProperty("text").GetString()!;
+        Assert.DoesNotContain("JVBERi0", text);
+        var url = new Uri(text[text.IndexOf("http://", StringComparison.Ordinal)..].Trim());
+        var download = await _http.GetAsync(url.PathAndQuery);
+        Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+        Assert.Equal("%PDF-"u8.ToArray(), await download.Content.ReadAsByteArrayAsync());
+        Assert.Equal("AB.pdf", download.Content.Headers.ContentDisposition?.FileName);
+        Assert.Equal(HttpStatusCode.NotFound, (await _http.GetAsync(url.PathAndQuery)).StatusCode);
     }
 
     [Fact]

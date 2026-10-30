@@ -127,6 +127,12 @@ public sealed class ExchangeOptions
     /// <summary>Maximum attachment size (bytes) the server will download and return.</summary>
     public int MaxAttachmentBytes { get; set; } = 5 * 1024 * 1024;
 
+    /// <summary>
+    /// Offers prepare_attachment_download: attachments are served once under a short-lived URL of this server, for a
+    /// file tool in the chat client (e.g. Fileshed in Open WebUI) to fetch. Off by default.
+    /// </summary>
+    public bool EnableDownloadLinks { get; set; }
+
     /// <summary>How long the Outlook on the web signature is cached per user and mailbox. Zero disables the cache.</summary>
     public TimeSpan SignatureCacheDuration { get; set; } = TimeSpan.FromMinutes(10);
 

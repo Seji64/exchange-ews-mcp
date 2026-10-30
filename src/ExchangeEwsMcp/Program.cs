@@ -66,6 +66,7 @@ builder.Services.AddSingleton<UpstreamIdentityProvider>();
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddSingleton<ExchangeServiceFactory>();
 builder.Services.AddScoped<EwsContext>();
+builder.Services.AddSingleton<DownloadStore>();
 
 builder.Services.AddAuthentication(o =>
     {
@@ -175,6 +176,10 @@ if (exchangeOptions.AllowSend)
 {
     mcp.WithTools<SendTools>();
 }
+if (exchangeOptions.EnableDownloadLinks)
+{
+    mcp.WithTools<DownloadTools>();
+}
 
 // Guard rails: drop the tools the access level does not allow, based on their MCP annotations.
 builder.Services.PostConfigure<McpServerOptions>(o =>
@@ -205,6 +210,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/healthz", () => Results.Text("ok"));
+if (exchangeOptions.EnableDownloadLinks)
+{
+    app.MapGet("/downloads/{token}", (string token, DownloadStore downloads) =>
+        downloads.Take(token) is { } file ? Results.File(file.Content, file.ContentType, file.Name) : Results.NotFound());
+}
 if (!passthrough)
 {
     app.MapOAuthServer();
