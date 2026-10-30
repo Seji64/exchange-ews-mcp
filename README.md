@@ -116,7 +116,13 @@ uses modern authentication against your on-premises Exchange, this is the case.
    ```
 
    The host in the EWS scope must be the Exchange URL that is registered for HMA. It's the same value as the
-   `https://<host>/EWS.AccessAsUser.All` scope used in desktop tools such as AutoSignature.NET.
+   `https://<host>/EWS.AccessAsUser.All` scope used in desktop tools such as AutoSignature.NET. Use the same host in
+   `Exchange:EwsUrl`. To list the registered URLs:
+
+   ```powershell
+   Connect-MgGraph -Scopes Application.Read.All
+   (Get-MgServicePrincipal -Filter "appId eq '00000002-0000-0ff1-ce00-000000000000'").ServicePrincipalNames
+   ```
 
 ## Setup with AD FS (Exchange Modern Authentication without hybrid)
 
@@ -216,6 +222,14 @@ docker compose up -d
 
 - Open WebUI needs a fixed `WEBUI_SECRET_KEY`, otherwise OAuth tokens break when it restarts.
 - Don't set OAuth tools as default tools on a model, because the sign-in redirect can't happen in the middle of a request.
+
+## Troubleshooting
+
+| Error | Cause |
+| --- | --- |
+| `AADSTS500011: The resource principal named https://… was not found` | The host in the EWS scope isn't registered for HMA. Use one of the URLs from the `ServicePrincipalNames` list above (often a dedicated EWS host). |
+| `AADSTS9010010: The resource parameter provided in the request doesn't match with the requested scopes` | The EWS scope isn't a full URL (e.g. only `EWS.AccessAsUser.All`). Open WebUI then also sends a `resource` parameter, which Entra rejects. Always use `https://<host>/EWS.AccessAsUser.All`. |
+| Tool error mentioning HTTP 401 | Exchange rejected the token: the scope host and `Exchange:EwsUrl` don't belong to the same HMA-registered Exchange, or EWS doesn't allow OAuth. |
 
 ## Configuration reference
 
