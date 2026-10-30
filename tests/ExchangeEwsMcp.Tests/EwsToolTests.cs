@@ -132,9 +132,13 @@ public sealed class EwsToolTests : IAsyncLifetime
         var result = await CallToolAsync("create_draft", new { subject = "Hi", body = "Hello Bob", to = new[] { "bob@contoso.com" }, includeSignature = true });
 
         Assert.False(result.TryGetProperty("isError", out var isError) && isError.GetBoolean(), result.ToString());
-        var createItem = _ews.Requests.Single(r => r.Body.Contains(":CreateItem ")).Body;
+        var createItem = _ews.Requests.First(r => r.Body.Contains(":CreateItem ")).Body;
         Assert.Contains("Hello Bob", createItem);
         Assert.Contains("&lt;b&gt;Alice Example&lt;/b&gt;", createItem);
+
+        // The signature is cached (Exchange:SignatureCacheDuration, default 10 minutes).
+        await CallToolAsync("create_draft", new { subject = "Again", body = "Hello again", to = new[] { "bob@contoso.com" }, includeSignature = true });
+        Assert.Single(_ews.Requests, r => r.Body.Contains(":GetUserConfiguration"));
     }
 
     [Fact]

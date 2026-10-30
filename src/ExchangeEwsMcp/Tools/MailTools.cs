@@ -440,9 +440,19 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
 
         // Outlook on the web keeps the signature in the mailbox (where tools like AutoSignature.NET write it);
         // Exchange does not add it to drafts created via EWS.
-        var signature = await cache.GetOrCreateAsync("signature:" + ews.GrantId + "|" + ews.Mailbox, async entry =>
+        var lifetime = ews.Options.SignatureCacheDuration;
+        var signature = (lifetime > TimeSpan.Zero
+            ? await cache.GetOrCreateAsync("signature:" + ews.GrantId + "|" + ews.Mailbox, entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = lifetime;
+                return LoadSignatureAsync();
+            })
+            : await LoadSignatureAsync())
+            ?? throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
+        return new MessageBody(BodyType.HTML, result.Text + "<br>" + signature);
+
+        async Task<string?> LoadSignatureAsync()
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
             UserConfiguration options;
             try
             {
@@ -456,8 +466,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
             return options.Dictionary.TryGetValue("signaturehtml", out var html) && html is string h && h.Trim().Length > 0 ? h
                 : options.Dictionary.TryGetValue("signaturetext", out var text) && text is string t && t.Trim().Length > 0 ? CreateBody(t, "text").Text
                 : null;
-        }) ?? throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
-        return new MessageBody(BodyType.HTML, result.Text + "<br>" + signature);
+        }
     }
 
     private async Task<EmailMessage> BindDraftAsync(string id)

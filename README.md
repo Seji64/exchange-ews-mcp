@@ -283,6 +283,7 @@ All settings can be set in `appsettings.json` or as environment variables (`Sect
 | `Exchange:MaxResults` | `25` | Upper bound for search results (default per search: 10) |
 | `Exchange:MaxBodyLength` | `8000` | Characters of a message body returned to the model (`read_mail` returns only the new part of a message unless `includeQuotedHistory` is set) |
 | `Exchange:MaxAttachmentBytes` | `5242880` | Largest attachment that is downloaded or added |
+| `Exchange:SignatureCacheDuration` | `00:10:00` | How long the Outlook signature is cached per user and mailbox; `00:00:00` reads it for every draft |
 | `Exchange:TraceEws` | `false` | Logs EWS SOAP traffic at debug level (contains mail content) |
 
 ## Development
