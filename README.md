@@ -1,6 +1,18 @@
-<p align="center"><img src="docs/logo.svg" width="128" alt="Exchange EWS MCP logo"></p>
+<p align="center">
+  <img src="docs/logo.svg" width="160" alt="Exchange EWS MCP logo">
+</p>
 
-# Exchange EWS MCP
+<h1 align="center">Exchange EWS MCP</h1>
+
+<p align="center">
+  MCP server for on-premises Exchange Server · EWS with OAuth · Entra ID &amp; AD FS
+</p>
+
+<p align="center">
+  <a href="https://github.com/Seji64/exchange-ews-mcp/actions/workflows/ci.yml"><img src="https://github.com/Seji64/exchange-ews-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Seji64/exchange-ews-mcp/releases"><img src="https://img.shields.io/github/v/release/Seji64/exchange-ews-mcp?include_prereleases" alt="Release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
 
 An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Server (Subscription Edition, 2019)** that uses
 **EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container.
