@@ -129,7 +129,13 @@ var mcp = builder.Services.AddMcpServer(o =>
     {
         try
         {
-            return await next(context, ct);
+            var result = await next(context, ct);
+            // Safety net: no single tool answer may flood the model's context window.
+            foreach (var block in result.Content.OfType<TextContentBlock>().Where(b => b.Text.Length > MaxToolResultChars))
+            {
+                block.Text = block.Text[..MaxToolResultChars] + "\n[output truncated]";
+            }
+            return result;
         }
         catch (Exception e) when (e is GrantExpiredException or ServiceResponseException or ServiceRequestException or ServiceLocalException)
         {
@@ -210,6 +216,8 @@ return 0;
 
 public partial class Program
 {
+    private const int MaxToolResultChars = 40_000;
+
     private static string? ItemIdArgument(IDictionary<string, JsonElement> args) =>
         new[] { "id", "itemId", "ids" }.Select(name => args.TryGetValue(name, out var v) ? v : default)
             .Select(v => v.ValueKind switch

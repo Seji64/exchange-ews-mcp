@@ -205,13 +205,12 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
 
     [McpServerTool(Name = "get_attachment", ReadOnly = true, Idempotent = true, OpenWorld = false)]
     [Description("""
-        Downloads an attachment of an e-mail or calendar item. Text-based files (txt, csv, json, xml, html, md, ics, eml)
-        are returned as text, images as image content. Other binary files are only described unless includeBase64 is true.
+        Reads an attachment of an e-mail or calendar item. Text files, PDF and Word (.docx) are returned as text,
+        small images as image content, attached e-mails with their text. Other formats are only described.
         """)]
     public async Task<CallToolResult> GetAttachment(
         [Description("The item id.")] string itemId,
         [Description("Attachment index (from read_mail), file name, or attachment id.")] string attachment,
-        [Description("Return other binary files as base64. Default false.")] bool includeBase64 = false,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
@@ -229,47 +228,54 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
 
         if (match is ItemAttachment itemAttachment)
         {
-            await itemAttachment.Load(CancellationToken.None, ItemSchema.MimeContent);
-            var text = Encoding.UTF8.GetString(itemAttachment.Item?.MimeContent?.Content ?? []);
-            return TextResult($"Attached item '{match.Name}' (MIME):\n\n{Truncate(text, ews.Options.MaxBodyLength).Text}");
+            // An attached e-mail (e.g. a forwarded message): its text and attachment names, not the raw MIME.
+            await itemAttachment.Load(BodyType.Text, CancellationToken.None, ItemSchema.Subject, ItemSchema.Body, ItemSchema.Attachments,
+                ItemSchema.DateTimeSent, EmailMessageSchema.From);
+            var attached = itemAttachment.Item;
+            var from = attached is EmailMessage m ? ToPerson(Try(() => m.From))?.ToString() : null;
+            var (body, truncated) = Truncate(Try(() => attached?.Body?.Text), ews.Options.MaxBodyLength);
+            var nested = attached is null ? [] : ListAttachments(attached).Select(a => a.Name).ToList();
+            return TextResult($"""
+                Attached item '{match.Name}'
+                Subject: {Try(() => attached?.Subject)}
+                From: {from}
+                Sent: {ews.TryFormat(() => attached!.DateTimeSent)}
+                {(nested.Count > 0 ? $"Its attachments (not readable through this tool): {string.Join(", ", nested)}" : "")}
+
+                {body}{(truncated ? "\n[truncated]" : "")}
+                """);
         }
 
         var file = (FileAttachment)match;
         await file.Load();
         var content = file.Content ?? [];
         var contentType = file.ContentType ?? "application/octet-stream";
+        var header = $"Attachment '{file.Name}' ({contentType}, {content.Length} bytes)";
 
-        if (IsText(contentType, file.Name))
+        string? text;
+        try
         {
-            var (text, truncated) = Truncate(Encoding.UTF8.GetString(content), ews.Options.MaxBodyLength);
-            return TextResult($"Attachment '{file.Name}' ({contentType}, {content.Length} bytes){(truncated ? ", truncated" : "")}:\n\n{text}");
+            text = AttachmentText.Extract(content, contentType, file.Name);
         }
-        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+        catch (Exception e) when (e is not OperationCanceledException)
         {
-            return new CallToolResult
-            {
-                Content =
-                [
-                    new TextContentBlock { Text = $"Attachment '{file.Name}' ({contentType}, {content.Length} bytes)." },
-                    ImageContentBlock.FromBytes(content, contentType),
-                ],
-            };
+            return TextResult($"{header} could not be read: {e.Message}");
         }
-        if (includeBase64)
+        if (text is not null)
         {
-            return TextResult($"Attachment '{file.Name}' ({contentType}, {content.Length} bytes), base64:\n{Convert.ToBase64String(content)}");
+            if (text.Trim().Length == 0) return TextResult($"{header} contains no extractable text (e.g. a scanned document).");
+            var (value, truncated) = Truncate(text, ews.Options.MaxBodyLength);
+            return TextResult($"{header}{(truncated ? $", first {ews.Options.MaxBodyLength} characters" : "")}:\n\n{value}");
         }
-        return TextResult($"Attachment '{file.Name}' is a binary file ({contentType}, {content.Length} bytes) whose content cannot be displayed as text.");
+        // Images go to vision-capable models as image content; large ones would flood the context.
+        if (contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && content.Length <= MaxImageBytes)
+        {
+            return new CallToolResult { Content = [new TextContentBlock { Text = header + "." }, ImageContentBlock.FromBytes(content, contentType)] };
+        }
+        return TextResult($"{header} cannot be shown as text.");
     }
 
-    private static bool IsText(string contentType, string? name)
-    {
-        var ext = Path.GetExtension(name ?? "").ToLowerInvariant();
-        return contentType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)
-            || contentType.Contains("json", StringComparison.OrdinalIgnoreCase)
-            || contentType.Contains("xml", StringComparison.OrdinalIgnoreCase)
-            || ext is ".txt" or ".csv" or ".json" or ".xml" or ".md" or ".html" or ".htm" or ".ics" or ".eml" or ".log" or ".yaml" or ".yml";
-    }
+    private const int MaxImageBytes = 512 * 1024;
 
     private static CallToolResult TextResult(string text) => new() { Content = [new TextContentBlock { Text = text }] };
 
