@@ -23,6 +23,7 @@ public sealed class DownloadStore(IMemoryCache cache, IOptions<ServerOptions> se
     }
 
     /// <summary>Returns the file once; the URL is invalid afterwards.</summary>
+    // shortcut: two requests in the same instant could both get the file; use a lock if single use must be strict.
     public File? Take(string token)
     {
         if (!cache.TryGetValue(Key(token), out File? file)) return null;

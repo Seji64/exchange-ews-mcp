@@ -195,7 +195,6 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
             Try(() => item.IsDraft),
             Try(() => item.Importance).ToString(),
             Try(() => item.Categories) is { Count: > 0 } categories ? categories.ToList() : null,
-            Try(() => item.ConversationId?.UniqueId),
             Try(() => item.Body?.BodyType) == BodyType.HTML ? "html" : "text",
             body,
             truncated,
@@ -206,7 +205,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
 
     internal static IReadOnlyList<AttachmentInfo> ListAttachments(Item item) =>
         Try(() => item.Attachments)?.Select((a, i) => new AttachmentInfo(
-            i, a.Id, a.Name, NullIfEmpty(a.ContentType), Try(() => a.Size), Try(() => a.IsInline), a is ItemAttachment)).ToList()
+            i, a.Name, NullIfEmpty(a.ContentType), Try(() => a.Size), Try(() => a.IsInline) ? true : null, a is ItemAttachment ? true : null)).ToList()
         ?? [];
 
     [McpServerTool(Name = "get_attachment", ReadOnly = true, Idempotent = true, OpenWorld = false)]
@@ -217,7 +216,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
         """)]
     public async Task<CallToolResult> GetAttachment(
         [Description("The item id.")] string itemId,
-        [Description("Attachment index (from read_mail), file name, or attachment id.")] string attachment,
+        [Description("Attachment index or file name (from read_mail).")] string attachment,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);

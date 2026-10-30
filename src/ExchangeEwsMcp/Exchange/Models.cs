@@ -22,7 +22,8 @@ public sealed record MailSummary(
     bool? IsDraft,
     string? Preview);
 
-public sealed record AttachmentInfo(int Index, string Id, string Name, string? ContentType, int Size, bool IsInline, bool IsItemAttachment);
+// Attachments are addressed by index or name; the long EWS attachment id would only cost context.
+public sealed record AttachmentInfo(int Index, string Name, string? ContentType, int Size, bool? IsInline, bool? IsItemAttachment);
 
 public sealed record MailDetails(
     string Id,
@@ -37,7 +38,6 @@ public sealed record MailDetails(
     bool IsDraft,
     string? Importance,
     IReadOnlyList<string>? Categories,
-    string? ConversationId,
     string BodyType,
     string Body,
     bool BodyTruncated,

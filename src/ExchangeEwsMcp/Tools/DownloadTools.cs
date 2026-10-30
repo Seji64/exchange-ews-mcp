@@ -17,7 +17,7 @@ public sealed class DownloadTools(EwsContext ews, DownloadStore downloads)
         """)]
     public async Task<string> PrepareAttachmentDownload(
         [Description("The item id.")] string itemId,
-        [Description("Attachment index (from read_mail), file name, or attachment id.")] string attachment,
+        [Description("Attachment index or file name (from read_mail).")] string attachment,
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
