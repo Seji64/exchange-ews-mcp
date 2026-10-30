@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Security.Claims;
 using ExchangeEwsMcp.Exchange;
 using Microsoft.Exchange.WebServices.Data;
+using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using static ExchangeEwsMcp.Exchange.EwsHelpers;
 
@@ -44,5 +45,53 @@ public sealed class PeopleTools(EwsContext ews)
                 NullIfEmpty(Try(() => c is not null && c.PhoneNumbers.TryGetValue(PhoneNumberKey.BusinessPhone, out var p) ? p : null)),
                 r.Mailbox.MailboxType == MailboxType.Contact ? "contacts" : "directory");
         }).ToList();
+    }
+
+    [McpServerTool(Name = "expand_group", ReadOnly = true, Idempotent = true, OpenWorld = false)]
+    [Description("""
+        Lists the members of a distribution list (e.g. to answer "Am I in list X?" or "Who is in X?").
+        Exchange cannot list the groups a person is a member of; check specific lists instead.
+        """)]
+    public async Task<GroupExpansion> ExpandGroup(
+        [Description("Distribution list: e-mail address, alias or name.")] string group,
+        [Description("Also expand nested distribution lists. Default false.")] bool recursive = false)
+    {
+        var address = await ResolveGroupAsync(group);
+        var members = new List<ListMember>();
+        var expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { address };
+        var pending = new Queue<string>([address]);
+        var complete = true;
+
+        // shortcut: stops after 2000 members, enough for "am I in it?"; page through nested lists if larger ones matter.
+        while (pending.TryDequeue(out var current) && members.Count < 2000)
+        {
+            var result = await ews.Service.ExpandGroup(current);
+            complete &= result.IncludesAllMembers;
+            foreach (var m in result.Members)
+            {
+                var isGroup = m.MailboxType is MailboxType.PublicGroup or MailboxType.ContactGroup;
+                if (members.Any(x => string.Equals(x.Email, m.Address, StringComparison.OrdinalIgnoreCase))) continue;
+                members.Add(new ListMember(NullIfEmpty(m.Name), NullIfEmpty(m.Address), isGroup ? "group" : "person",
+                    current == address ? null : current));
+                if (recursive && isGroup && !string.IsNullOrEmpty(m.Address) && expanded.Add(m.Address))
+                {
+                    pending.Enqueue(m.Address);
+                }
+            }
+        }
+        return new GroupExpansion(address, members.Count, complete && pending.Count == 0, members);
+    }
+
+    private async Task<string> ResolveGroupAsync(string group)
+    {
+        group = group.Trim();
+        var groups = (await ews.Service.ResolveName(group, ResolveNameSearchLocation.DirectoryOnly, false))
+            .Where(r => r.Mailbox.MailboxType == MailboxType.PublicGroup && !string.IsNullOrEmpty(r.Mailbox.Address))
+            .ToList();
+        var exact = groups.FirstOrDefault(r => string.Equals(r.Mailbox.Address, group, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null || groups.Count == 1) return (exact ?? groups[0]).Mailbox.Address!;
+        throw new McpException(groups.Count == 0
+            ? $"No distribution list '{group}' found in the address book."
+            : $"'{group}' matches several distribution lists: {string.Join("; ", groups.Take(10).Select(g => $"{g.Mailbox.Name} <{g.Mailbox.Address}>"))}");
     }
 }

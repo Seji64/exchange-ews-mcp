@@ -138,6 +138,38 @@ public sealed class EwsToolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Expand_group_resolves_the_list_and_expands_nested_lists_once()
+    {
+        _ews.Responses["ResolveNames"] = """
+            <m:ResolveNamesResponse><m:ResponseMessages><m:ResolveNamesResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:ResolutionSet TotalItemsInView="1" IncludesLastItemInRange="true"><t:Resolution><t:Mailbox>
+                <t:Name>Team</t:Name><t:EmailAddress>team@contoso.com</t:EmailAddress>
+                <t:RoutingType>SMTP</t:RoutingType><t:MailboxType>PublicDL</t:MailboxType>
+              </t:Mailbox></t:Resolution></m:ResolutionSet>
+            </m:ResolveNamesResponseMessage></m:ResponseMessages></m:ResolveNamesResponse>
+            """;
+        // Every list contains Alice and the nested list "sub" (which also contains itself: cycle).
+        _ews.Responses["ExpandDL"] = """
+            <m:ExpandDLResponse><m:ResponseMessages><m:ExpandDLResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:DLExpansion TotalItemsInView="2" IncludesLastItemInRange="true">
+                <t:Mailbox><t:Name>Alice</t:Name><t:EmailAddress>alice@contoso.com</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox>
+                <t:Mailbox><t:Name>Sub</t:Name><t:EmailAddress>sub@contoso.com</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType><t:MailboxType>PublicDL</t:MailboxType></t:Mailbox>
+              </m:DLExpansion>
+            </m:ExpandDLResponseMessage></m:ResponseMessages></m:ExpandDLResponse>
+            """;
+
+        var result = await CallToolAsync("expand_group", new { group = "Team", recursive = true });
+
+        var json = JsonDocument.Parse(result.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement;
+        Assert.Equal("team@contoso.com", json.GetProperty("group").GetString());
+        Assert.True(json.GetProperty("complete").GetBoolean());
+        Assert.Equal(["alice@contoso.com", "sub@contoso.com"], json.GetProperty("members").EnumerateArray().Select(m => m.GetProperty("email").GetString()));
+        Assert.Equal(3, _ews.Requests.Count); // ResolveNames, ExpandDL team, ExpandDL sub
+    }
+
+    [Fact]
     public async Task Ews_errors_are_reported_to_the_model()
     {
         _ews.Responses["GetItem"] = """

@@ -95,6 +95,10 @@ public sealed record AvailabilityResult(
 
 public sealed record ResolvedName(string? Name, string? Email, string? Type, string? Department, string? JobTitle, string? Office, string? Phone, string Source);
 
+public sealed record ListMember(string? Name, string? Email, string Type, string? ViaGroup);
+
+public sealed record GroupExpansion(string Group, int Count, bool Complete, IReadOnlyList<ListMember> Members);
+
 public sealed record OutOfOfficeInfo(string Mailbox, string State, string? Start, string? End, string ExternalAudience, string? InternalReply, string? ExternalReply);
 
 public sealed record UserInfo(string? DisplayName, string? Email, string? UserPrincipalName, string TimeZone, string Now, bool SendingEnabled, string AccessLevel);
