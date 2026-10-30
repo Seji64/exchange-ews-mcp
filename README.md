@@ -206,7 +206,8 @@ docker compose up -d
    - **ID**: e.g. `exchange`. It's part of the redirect URI, so don't change it later.
    - **Auth**: `OAuth 2.1 (Static)` with the **Client ID** and **Client Secret** of the Entra app registration. Leave
      *OAuth Server URL* and *Scopes* empty.
-   - Click **Register Client**, then save.
+   - Click **Register Client**, then save. Open WebUI reads the scopes from the MCP server only at this moment, so
+     click **Register Client** and save again whenever you change `IdentityProvider:Scopes`.
 3. In the Entra app registration, the redirect URI must be `https://openwebui.contoso.com/oauth/clients/mcp:exchange/callback`
    (Open WebUI's `WEBUI_URL` + `/oauth/clients/mcp:<ID>/callback`).
 4. Each user enables the tool in a chat (**+ → Integrations → Tools**). The first time, a Microsoft sign-in popup opens.
@@ -228,7 +229,7 @@ docker compose up -d
 | Error | Cause |
 | --- | --- |
 | `AADSTS500011: The resource principal named https://… was not found` | The host in the EWS scope isn't registered for HMA. Use one of the URLs from the `ServicePrincipalNames` list above (often a dedicated EWS host). |
-| `AADSTS9010010: The resource parameter provided in the request doesn't match with the requested scopes` | The EWS scope isn't a full URL (e.g. only `EWS.AccessAsUser.All`). Open WebUI then also sends a `resource` parameter, which Entra rejects. Always use `https://<host>/EWS.AccessAsUser.All`. |
+| `AADSTS9010010: The resource parameter provided in the request doesn't match with the requested scopes` | The EWS scope isn't a full URL (e.g. only `EWS.AccessAsUser.All`). Open WebUI then also sends a `resource` parameter, which Entra rejects. Always use `https://<host>/EWS.AccessAsUser.All`, then click **Register Client** in Open WebUI again and save. |
 | Tool error mentioning HTTP 401 | Exchange rejected the token: the scope host and `Exchange:EwsUrl` don't belong to the same HMA-registered Exchange, or EWS doesn't allow OAuth. |
 
 ## Configuration reference
