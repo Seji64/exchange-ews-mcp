@@ -2,7 +2,6 @@ using System.ComponentModel;
 using System.Security.Claims;
 using ExchangeEwsMcp.Exchange;
 using Microsoft.Exchange.WebServices.Data;
-using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using static ExchangeEwsMcp.Exchange.EwsHelpers;
 
@@ -56,8 +55,10 @@ public sealed class PeopleTools(EwsContext ews)
         [Description("Distribution list: e-mail address, alias or name.")] string group,
         [Description("Also expand nested distribution lists. Default false.")] bool recursive = false)
     {
-        var address = await ResolveGroupAsync(group);
+        var address = (await ResolveOneAsync(ews.Service, group.Trim(), ResolveNameSearchLocation.DirectoryOnly, "Distribution list",
+            m => m.MailboxType == MailboxType.PublicGroup)).Address;
         var members = new List<ListMember>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var expanded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { address };
         var pending = new Queue<string>([address]);
         var complete = true;
@@ -70,7 +71,7 @@ public sealed class PeopleTools(EwsContext ews)
             foreach (var m in result.Members)
             {
                 var isGroup = m.MailboxType is MailboxType.PublicGroup or MailboxType.ContactGroup;
-                if (members.Any(x => string.Equals(x.Email, m.Address, StringComparison.OrdinalIgnoreCase))) continue;
+                if (!seen.Add(m.Address ?? m.Name ?? "")) continue;
                 members.Add(new ListMember(NullIfEmpty(m.Name), NullIfEmpty(m.Address), isGroup ? "group" : "person",
                     current == address ? null : current));
                 if (recursive && isGroup && !string.IsNullOrEmpty(m.Address) && expanded.Add(m.Address))
@@ -80,18 +81,5 @@ public sealed class PeopleTools(EwsContext ews)
             }
         }
         return new GroupExpansion(address, members.Count, complete && pending.Count == 0, members);
-    }
-
-    private async Task<string> ResolveGroupAsync(string group)
-    {
-        group = group.Trim();
-        var groups = (await ews.Service.ResolveName(group, ResolveNameSearchLocation.DirectoryOnly, false))
-            .Where(r => r.Mailbox.MailboxType == MailboxType.PublicGroup && !string.IsNullOrEmpty(r.Mailbox.Address))
-            .ToList();
-        var exact = groups.FirstOrDefault(r => string.Equals(r.Mailbox.Address, group, StringComparison.OrdinalIgnoreCase));
-        if (exact is not null || groups.Count == 1) return (exact ?? groups[0]).Mailbox.Address!;
-        throw new McpException(groups.Count == 0
-            ? $"No distribution list '{group}' found in the address book."
-            : $"'{group}' matches several distribution lists: {string.Join("; ", groups.Take(10).Select(g => $"{g.Mailbox.Name} <{g.Mailbox.Address}>"))}");
     }
 }

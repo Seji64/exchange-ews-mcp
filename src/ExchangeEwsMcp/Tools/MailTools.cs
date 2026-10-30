@@ -426,8 +426,16 @@ public sealed class MailTools(EwsContext ews)
 
         // Outlook on the web keeps the signature in the mailbox (where tools like AutoSignature.NET write it);
         // Exchange does not add it to drafts created via EWS.
-        var options = await UserConfiguration.Bind(ews.Service, "OWA.UserOptions", ews.WellKnown(WellKnownFolderName.Root),
-            UserConfigurationProperties.Dictionary);
+        UserConfiguration options;
+        try
+        {
+            options = await UserConfiguration.Bind(ews.Service, "OWA.UserOptions", ews.WellKnown(WellKnownFolderName.Root),
+                UserConfigurationProperties.Dictionary);
+        }
+        catch (ServiceResponseException e) when (e.ErrorCode == ServiceError.ErrorItemNotFound)
+        {
+            throw new McpException("No Outlook on the web signature is configured for this mailbox. The draft was not created.");
+        }
         var signature =
             options.Dictionary.TryGetValue("signaturehtml", out var html) && html is string h && h.Trim().Length > 0 ? h
             : options.Dictionary.TryGetValue("signaturetext", out var text) && text is string t && t.Trim().Length > 0 ? CreateBody(t, "text").Text

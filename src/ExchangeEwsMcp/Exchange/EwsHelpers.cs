@@ -76,21 +76,29 @@ internal static class EwsHelpers
                 continue;
             }
 
-            var matches = await service.ResolveName(value, ResolveNameSearchLocation.ContactsThenDirectory, false);
-            var mailboxes = matches.Where(m => !string.IsNullOrEmpty(m.Mailbox.Address)).ToList();
-            if (mailboxes.Count == 1)
-            {
-                result.Add(new EmailAddress(mailboxes[0].Mailbox.Name, mailboxes[0].Mailbox.Address));
-                continue;
-            }
-            if (mailboxes.Count == 0)
-            {
-                throw new McpException($"Recipient '{value}' could not be resolved. Use an e-mail address or call resolve_names.");
-            }
-            var candidates = string.Join("; ", mailboxes.Take(10).Select(m => $"{m.Mailbox.Name} <{m.Mailbox.Address}>"));
-            throw new McpException($"Recipient '{value}' is ambiguous. Ask the user which one is meant: {candidates}");
+            var match = await ResolveOneAsync(service, value, ResolveNameSearchLocation.ContactsThenDirectory, "Recipient");
+            result.Add(new EmailAddress(match.Name, match.Address));
         }
         return result;
+    }
+
+    /// <summary>
+    /// Resolves a name, alias or address to exactly one address book entry (an exact address match wins);
+    /// otherwise reports the candidates so the model can ask the user.
+    /// </summary>
+    public static async Task<EmailAddress> ResolveOneAsync(
+        ExchangeService service, string query, ResolveNameSearchLocation location, string what, Func<EmailAddress, bool>? filter = null)
+    {
+        var matches = (await service.ResolveName(query, location, false))
+            .Select(r => r.Mailbox)
+            .Where(m => !string.IsNullOrEmpty(m.Address) && (filter?.Invoke(m) ?? true))
+            .ToList();
+        return matches.FirstOrDefault(m => string.Equals(m.Address, query, StringComparison.OrdinalIgnoreCase))
+            ?? (matches.Count == 1 ? matches[0] : null)
+            ?? throw new McpException(matches.Count == 0
+                ? $"{what} '{query}' was not found in the address book. Use an e-mail address or call resolve_names."
+                : $"{what} '{query}' is ambiguous. Ask the user which one is meant: " +
+                  string.Join("; ", matches.Take(10).Select(m => $"{m.Name} <{m.Address}>")));
     }
 
     public static string DescribeEwsError(Exception e) => e switch

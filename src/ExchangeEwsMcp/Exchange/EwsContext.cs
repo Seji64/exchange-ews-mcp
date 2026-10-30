@@ -47,16 +47,7 @@ public sealed class EwsContext(
         var key = "mailbox:" + mailbox.ToLowerInvariant();
         if (!cache.TryGetValue(key, out string? smtp))
         {
-            var matches = (await Service.ResolveName(mailbox, ResolveNameSearchLocation.DirectoryOnly, false))
-                .Where(m => !string.IsNullOrEmpty(m.Mailbox.Address)).ToList();
-            smtp = (matches.FirstOrDefault(m => string.Equals(m.Mailbox.Address, mailbox, StringComparison.OrdinalIgnoreCase))
-                ?? (matches.Count == 1 ? matches[0] : null))?.Mailbox.Address;
-            if (smtp is null)
-            {
-                throw new McpException(matches.Count == 0
-                    ? $"Mailbox '{mailbox}' was not found in the address book."
-                    : $"Mailbox '{mailbox}' is ambiguous: {string.Join("; ", matches.Take(10).Select(m => $"{m.Mailbox.Name} <{m.Mailbox.Address}>"))}");
-            }
+            smtp = (await EwsHelpers.ResolveOneAsync(Service, mailbox, ResolveNameSearchLocation.DirectoryOnly, "Mailbox")).Address;
             cache.Set(key, smtp, TimeSpan.FromHours(4));
         }
         _mailbox = smtp;
