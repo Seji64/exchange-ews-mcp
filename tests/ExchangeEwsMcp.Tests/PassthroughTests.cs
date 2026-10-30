@@ -33,6 +33,7 @@ public sealed class PassthroughTests : IAsyncLifetime
     {
         var prm = JsonDocument.Parse(await _http.GetStringAsync("/.well-known/oauth-protected-resource/mcp")).RootElement;
         Assert.Equal(FakeIdentityProvider.Authority, prm.GetProperty("authorization_servers")[0].GetString());
+        Assert.Equal("https://mail.contoso.com", prm.GetProperty("resource").GetString());
         Assert.Contains("https://mail.contoso.com/EWS.AccessAsUser.All",
             prm.GetProperty("scopes_supported").EnumerateArray().Select(s => s.GetString()));
 

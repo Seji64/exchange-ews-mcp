@@ -77,8 +77,10 @@ builder.Services.AddAuthentication(o =>
     {
         o.ResourceMetadata = new()
         {
-            Resource = serverOptions.McpResource,
             // In passthrough mode the client signs in at the identity provider directly and requests the EWS scopes.
+            // Clients may send this resource to the identity provider, which rejects it unless it matches the scopes,
+            // so advertise Exchange itself (e.g. https://mail.contoso.com).
+            Resource = passthrough ? identityProvider.Resource ?? ExchangeResource(identityProvider.Scopes) ?? serverOptions.McpResource : serverOptions.McpResource,
             AuthorizationServers = { passthrough ? identityProvider.Authority : serverOptions.Issuer },
             ScopesSupported = passthrough ? [.. identityProvider.Scopes] : [McpScopes.Exchange],
             ResourceName = "Exchange EWS MCP",
@@ -182,4 +184,9 @@ app.MapMcp("/mcp").RequireAuthorization();
 await app.RunAsync();
 return 0;
 
-public partial class Program;
+public partial class Program
+{
+    internal static string? ExchangeResource(IEnumerable<string> scopes) =>
+        scopes.Select(s => Uri.TryCreate(s, UriKind.Absolute, out var u) && u.Scheme == Uri.UriSchemeHttps ? u.GetLeftPart(UriPartial.Authority) : null)
+            .FirstOrDefault(r => r is not null);
+}
