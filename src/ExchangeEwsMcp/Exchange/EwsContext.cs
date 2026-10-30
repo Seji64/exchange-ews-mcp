@@ -17,7 +17,7 @@ public sealed class EwsContext(
     IMemoryCache cache,
     IOptions<ExchangeOptions> options)
 {
-    private ExchangeService? _service;
+    private string? _mailbox;
 
     public ExchangeOptions Options => options.Value;
 
@@ -31,7 +31,13 @@ public sealed class EwsContext(
     public string GrantId => User.FindFirstValue(AccessTokenAuthenticationHandler.GrantIdClaim) ?? throw new McpException("Not authenticated.");
 
     public ExchangeService Service =>
-        _service ??= factory.GetService(GrantId, User.FindFirstValue(AccessTokenAuthenticationHandler.PassthroughTokenClaim));
+        factory.GetService(GrantId, User.FindFirstValue(AccessTokenAuthenticationHandler.PassthroughTokenClaim), _mailbox);
+
+    /// <summary>
+    /// Routes the following EWS calls of this request to the given mailbox via X-AnchorMailbox,
+    /// so Exchange opens e.g. a shared mailbox on its own server. Null means the user's own mailbox.
+    /// </summary>
+    public void UseMailbox(string? mailbox) => _mailbox = string.IsNullOrWhiteSpace(mailbox) ? null : mailbox.Trim();
 
     /// <summary>Primary SMTP address of the signed-in user (resolved via EWS, cached).</summary>
     public async Task<string> GetCurrentUserSmtpAsync()

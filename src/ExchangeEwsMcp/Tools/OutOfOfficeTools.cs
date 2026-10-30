@@ -13,6 +13,7 @@ public sealed class OutOfOfficeTools(EwsContext ews)
     [Description("Gets the automatic replies (out of office) settings.")]
     public async Task<OutOfOfficeInfo> GetOutOfOffice([Description(MailTools.MailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var address = string.IsNullOrWhiteSpace(mailbox) ? await ews.GetCurrentUserSmtpAsync() : mailbox.Trim();
         var oof = await ews.Service.GetUserOofSettings(address);
         return new OutOfOfficeInfo(
@@ -39,6 +40,7 @@ public sealed class OutOfOfficeTools(EwsContext ews)
         [Description("External audience: 'none', 'known' (contacts only) or 'all'. Omit to keep the current setting.")] string? externalAudience = null,
         [Description(MailTools.MailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var address = string.IsNullOrWhiteSpace(mailbox) ? await ews.GetCurrentUserSmtpAsync() : mailbox.Trim();
         var oof = await ews.Service.GetUserOofSettings(address);
 

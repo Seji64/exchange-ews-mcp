@@ -30,12 +30,18 @@ public sealed class ExchangeServiceFactory : IDisposable
 
     /// <param name="grantId">Cache key: the grant id, or the token hash in passthrough mode.</param>
     /// <param name="passthroughToken">In passthrough mode, the EWS access token sent by the client.</param>
-    public ExchangeService GetService(string grantId, string? passthroughToken = null) =>
-        _cache.GetOrCreate(grantId, entry =>
+    /// <param name="anchorMailbox">Mailbox the requests are routed to (X-AnchorMailbox); null for the user's own.</param>
+    public ExchangeService GetService(string grantId, string? passthroughToken = null, string? anchorMailbox = null) =>
+        _cache.GetOrCreate(grantId + "|" + anchorMailbox?.ToLowerInvariant(), entry =>
         {
             entry.SlidingExpiration = TimeSpan.FromMinutes(30);
             entry.RegisterPostEvictionCallback(static (_, value, _, _) => (value as IDisposable)?.Dispose());
-            return Create(passthroughToken is null ? new GrantCredentials(_tokens, grantId) : new OAuthCredentials(passthroughToken));
+            var service = Create(passthroughToken is null ? new GrantCredentials(_tokens, grantId) : new OAuthCredentials(passthroughToken));
+            if (anchorMailbox is not null)
+            {
+                service.HttpHeaders["X-AnchorMailbox"] = anchorMailbox;
+            }
+            return service;
         })!;
 
     private ExchangeService Create(ExchangeCredentials credentials)

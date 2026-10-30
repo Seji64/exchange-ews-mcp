@@ -80,9 +80,10 @@ With `AllowSend=false` (the default), the parameters that would send something a
 The filter uses the MCP annotations of the tools (`readOnlyHint`, `destructiveHint`). Sending is controlled separately
 by `AllowSend`, and it is never possible with `ReadOnly`.
 
-Shared mailboxes: pass `mailbox: "team@contoso.com"` to `search_mail`, `list_folders`, `create_draft`, `list_events`,
-`create_event`, the out-of-office tools and others. The signed-in user needs Full Access, plus Send As or Send on Behalf
-to send from that mailbox.
+Shared mailboxes: pass `mailbox: "team@contoso.com"` to the tools, both when listing (`search_mail`, `list_folders`,
+`list_events`, ...) and when working with an item from that mailbox (`read_mail`, `get_attachment`, `update_draft`, ...).
+The server then sends `X-AnchorMailbox`, so Exchange routes the request to the server hosting that mailbox. The
+signed-in user needs Full Access, plus Send As or Send on Behalf to send from that mailbox.
 
 ## Setup with Microsoft Entra ID (Hybrid Modern Authentication)
 

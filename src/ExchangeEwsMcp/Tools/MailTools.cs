@@ -16,6 +16,9 @@ public sealed class MailTools(EwsContext ews)
     internal const string MailboxDescription =
         "Optional SMTP address of a shared or delegated mailbox. Omit for the user's own mailbox.";
 
+    internal const string ItemMailboxDescription =
+        "SMTP address of the shared or delegated mailbox the item is in. Omit for the user's own mailbox.";
+
     private static readonly PropertySet SummaryProperties = new(BasePropertySet.IdOnly,
         ItemSchema.Subject, EmailMessageSchema.From, ItemSchema.DisplayTo, ItemSchema.DateTimeReceived,
         EmailMessageSchema.IsRead, ItemSchema.HasAttachments, ItemSchema.Importance, ItemSchema.IsDraft, ItemSchema.Preview);
@@ -26,6 +29,7 @@ public sealed class MailTools(EwsContext ews)
         [Description(MailboxDescription)] string? mailbox = null,
         [Description("Include non-mail folders (calendar, contacts, tasks, ...). Default false.")] bool includeAllFolderTypes = false)
     {
+        ews.UseMailbox(mailbox);
         var root = ews.WellKnown(WellKnownFolderName.MsgFolderRoot, mailbox);
         var view = new FolderView(500)
         {
@@ -73,6 +77,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("Number of results to skip, for paging.")] int offset = 0,
         [Description(MailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var folderId = await ews.ResolveFolderAsync(folder, mailbox, WellKnownFolderName.Inbox);
         var view = new ItemView(Math.Clamp(maxResults, 1, ews.Options.MaxResults), Math.Max(0, offset)) { PropertySet = SummaryProperties };
         view.OrderBy.Add(ItemSchema.DateTimeReceived, SortDirection.Descending);
@@ -142,8 +147,10 @@ public sealed class MailTools(EwsContext ews)
     [Description("Reads a single e-mail including body, recipients and the list of attachments.")]
     public async Task<MailDetails> ReadMail(
         [Description("The item id from search_mail.")] string id,
-        [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text")
+        [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text",
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, EmailMessageSchema.BccRecipients)
         {
             RequestedBodyType = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? BodyType.HTML : BodyType.Text,
@@ -185,8 +192,10 @@ public sealed class MailTools(EwsContext ews)
     public async Task<CallToolResult> GetAttachment(
         [Description("The item id.")] string itemId,
         [Description("Attachment index (from read_mail), file name, or attachment id.")] string attachment,
-        [Description("Return other binary files as base64. Default false.")] bool includeBase64 = false)
+        [Description("Return other binary files as base64. Default false.")] bool includeBase64 = false,
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var item = await Item.Bind(ews.Service, new ItemId(itemId), new PropertySet(BasePropertySet.IdOnly, ItemSchema.Attachments));
         var attachments = item.Attachments.ToList();
         var match = (int.TryParse(attachment, out var index) && index >= 0 && index < attachments.Count ? attachments[index] : null)
@@ -262,6 +271,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("'low', 'normal' (default) or 'high'.")] string importance = "normal",
         [Description("Optional SMTP address of a shared mailbox to create the draft in (it is sent from that mailbox).")] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var message = new EmailMessage(ews.Service)
         {
             Subject = subject,
@@ -288,6 +298,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
         [Description("Optional SMTP address of the shared mailbox the original mail is in (draft is saved there).")] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var original = await EmailMessage.Bind(ews.Service, new ItemId(id));
         var reply = original.CreateReply(replyAll);
         reply.BodyPrefix = CreateBody(body, bodyFormat);
@@ -306,6 +317,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
         [Description("Optional SMTP address of the shared mailbox the original mail is in (draft is saved there).")] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var original = await EmailMessage.Bind(ews.Service, new ItemId(id));
         var forward = original.CreateForward();
         forward.ToRecipients.AddRange(await ResolveRecipientsAsync(ews.Service, to));
@@ -333,8 +345,10 @@ public sealed class MailTools(EwsContext ews)
         [Description("New Cc recipients.")] string[]? cc = null,
         [Description("New Bcc recipients.")] string[]? bcc = null,
         [Description("'text' (default) or 'html'.")] string bodyFormat = "text",
-        [Description("'low', 'normal' or 'high'.")] string? importance = null)
+        [Description("'low', 'normal' or 'high'.")] string? importance = null,
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var draft = await BindDraftAsync(id);
         if (subject is not null) draft.Subject = subject;
         if (body is not null) draft.Body = CreateBody(body, bodyFormat);
@@ -352,8 +366,10 @@ public sealed class MailTools(EwsContext ews)
         [Description("Draft id.")] string id,
         [Description("File name including extension, e.g. 'notes.txt'.")] string fileName,
         [Description("File content as text (UTF-8).")] string? contentText = null,
-        [Description("File content as base64.")] string? contentBase64 = null)
+        [Description("File content as base64.")] string? contentBase64 = null,
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         byte[] content;
         if (contentBase64 is not null)
         {
@@ -387,8 +403,10 @@ public sealed class MailTools(EwsContext ews)
 
     [McpServerTool(Name = "delete_draft", Destructive = true, OpenWorld = false)]
     [Description("Deletes a draft (moves it to Deleted Items). Only works for unsent drafts.")]
-    public async Task<string> DeleteDraft([Description("Draft id.")] string id)
+    public async Task<string> DeleteDraft([Description("Draft id.")] string id,
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var draft = await BindDraftAsync(id);
         await draft.Delete(DeleteMode.MoveToDeletedItems);
         return "Draft moved to Deleted Items.";
@@ -424,6 +442,7 @@ public sealed class MailTools(EwsContext ews)
         [Description("Target folder (well-known name, path or folder id).")] string folder,
         [Description(MailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         var target = await ews.ResolveFolderAsync(folder, mailbox, WellKnownFolderName.Inbox);
         if (ews.Options.AccessLevel != AccessLevel.Full && await IsDeletedItemsAsync(target, mailbox))
         {
@@ -454,8 +473,10 @@ public sealed class MailTools(EwsContext ews)
     public async Task<string> MarkMail(
         [Description("Item ids.")] string[] ids,
         [Description("true = read, false = unread. Omit to leave unchanged.")] bool? isRead = null,
-        [Description("Follow-up flag: 'flagged', 'complete' or 'none'. Omit to leave unchanged.")] string? flag = null)
+        [Description("Follow-up flag: 'flagged', 'complete' or 'none'. Omit to leave unchanged.")] string? flag = null,
+        [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
+        ews.UseMailbox(mailbox);
         if (isRead is null && flag is null) throw new McpException("Nothing to change: specify isRead and/or flag.");
         foreach (var id in ids)
         {

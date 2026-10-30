@@ -16,6 +16,8 @@ public sealed class FakeEwsServer : IAsyncDisposable
 
     public ConcurrentQueue<(string? Authorization, string Body)> Requests { get; } = new();
 
+    public ConcurrentQueue<string> AnchorMailboxes { get; } = new();
+
     /// <summary>Operation name (e.g. "FindItem") → SOAP body content placed inside s:Body.</summary>
     public ConcurrentDictionary<string, string> Responses { get; } = new();
 
@@ -33,6 +35,7 @@ public sealed class FakeEwsServer : IAsyncDisposable
         {
             var body = await new StreamReader(http.Request.Body).ReadToEndAsync();
             Requests.Enqueue((http.Request.Headers.Authorization.ToString(), body));
+            AnchorMailboxes.Enqueue(http.Request.Headers["X-AnchorMailbox"].ToString());
             if (StatusCode != 200)
             {
                 http.Response.StatusCode = StatusCode;

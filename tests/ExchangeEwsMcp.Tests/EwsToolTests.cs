@@ -77,6 +77,23 @@ public sealed class EwsToolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Shared_mailbox_requests_are_anchored_to_that_mailbox()
+    {
+        _ews.Responses["FindItem"] = """
+            <m:FindItemResponse><m:ResponseMessages><m:FindItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:RootFolder IndexedPagingOffset="0" TotalItemsInView="0" IncludesLastItemInRange="true"><t:Items /></m:RootFolder>
+            </m:FindItemResponseMessage></m:ResponseMessages></m:FindItemResponse>
+            """;
+
+        await CallToolAsync("search_mail", new { mailbox = "techmaster@contoso.com" });
+        await CallToolAsync("search_mail", new { });
+
+        Assert.Equal(["techmaster@contoso.com", ""], _ews.AnchorMailboxes);
+        Assert.Contains("<t:EmailAddress>techmaster@contoso.com</t:EmailAddress>", _ews.Requests.First().Body);
+    }
+
+    [Fact]
     public async Task Ews_errors_are_reported_to_the_model()
     {
         _ews.Responses["GetItem"] = """
