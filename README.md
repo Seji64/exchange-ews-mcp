@@ -4,10 +4,10 @@ An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Serv
 **EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container.
 
 > [!WARNING]
-> **Work in progress.** Tested so far with Exchange Server SE, Microsoft Entra ID (Hybrid Modern Authentication) and
-> Open WebUI in Passthrough mode: reading the own mailbox and a shared mailbox, creating drafts, and the `NoDelete` access
-> level. Broker mode, AD FS and the other writing tools have only been tested against simulated endpoints. Configuration and tools may still change.
-> Start with `Exchange:AccessLevel=ReadOnly` when you try it.
+> **Work in progress.** Tested with Exchange Server SE, Microsoft Entra ID (Hybrid Modern Authentication) and Open WebUI
+> in Passthrough mode. **Broker mode and AD FS are untested**, because no such environment is available; they are only
+> covered by automated tests against simulated endpoints. Feedback from AD FS or Broker setups is welcome.
+> Configuration and tools may still change. Start with `Exchange:AccessLevel=ReadOnly` when you try it.
 
 - **Streamable HTTP** transport, so MCP clients like [Open WebUI](https://docs.openwebui.com/features/extensibility/mcp/) connect to it directly, without mcpo.
 - **Per-user OAuth**. Each user signs in with their own account in a browser popup, and the server calls EWS on their behalf.
@@ -133,7 +133,7 @@ uses modern authentication against your on-premises Exchange, this is the case.
 ## Setup with AD FS (Exchange Modern Authentication without hybrid)
 
 > [!NOTE]
-> The AD FS variant uses the same code path as Entra ID, but it hasn't been tested against a real AD FS yet.
+> The AD FS variant uses the same code path as Entra ID, but it is untested, because no AD FS environment is available.
 
 Prerequisite: Modern Authentication with AD FS is configured as described in
 [Enabling Modern Auth in Exchange on-premises](https://learn.microsoft.com/exchange/plan-and-deploy/post-installation-tasks/enable-modern-auth-in-exchange-server-on-premises).
