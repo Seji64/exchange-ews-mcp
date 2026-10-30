@@ -201,7 +201,8 @@ public sealed class EwsToolTests : IAsyncLifetime
         _ews.AnchoredResponses["GetItem"] = """
             <m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success">
               <m:ResponseCode>NoError</m:ResponseCode>
-              <m:Items><t:Message><t:ItemId Id="AAMkShared" ChangeKey="C" /><t:Subject>Shared hello</t:Subject><t:Body BodyType="Text">Hi</t:Body></t:Message></m:Items>
+              <m:Items><t:Message><t:ItemId Id="AAMkShared" ChangeKey="C" /><t:Subject>Shared hello</t:Subject><t:Body BodyType="Text">Hi</t:Body>
+                <t:WebClientReadFormQueryString>?ItemID=AAMkShared&amp;exvsurl=1&amp;viewmodel=ReadMessageItem</t:WebClientReadFormQueryString></t:Message></m:Items>
             </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
             """;
 
@@ -210,6 +211,9 @@ public sealed class EwsToolTests : IAsyncLifetime
         Assert.False(result.TryGetProperty("isError", out var isError) && isError.GetBoolean(), result.ToString());
         Assert.Contains("Shared hello", result.GetProperty("content")[0].GetProperty("text").GetString());
         Assert.Equal("techmaster@contoso.com", _ews.AnchorMailboxes.Last());
+        // Relative form (older Exchange) is completed from the EWS URL; shared mailbox items use explicit logon.
+        var webLink = JsonDocument.Parse(result.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement.GetProperty("webLink").GetString();
+        Assert.Equal(new Uri(new Uri(_ews.Url), "/owa/techmaster@contoso.com/?ItemID=AAMkShared&exvsurl=1&viewmodel=ReadMessageItem").ToString(), webLink);
     }
 
     [Theory]
@@ -226,6 +230,7 @@ public sealed class EwsToolTests : IAsyncLifetime
             From: Bob
             Old quoted text with a lot of history</t:Body>
                 <t:UniqueBody BodyType="Text">New text</t:UniqueBody>
+                <t:WebClientReadFormQueryString>https://mail.contoso.com/owa/?ItemID=AAMk1&amp;exvsurl=1&amp;viewmodel=ReadMessageItem</t:WebClientReadFormQueryString>
               </t:Message></m:Items>
             </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
             """;
@@ -235,6 +240,7 @@ public sealed class EwsToolTests : IAsyncLifetime
         var json = JsonDocument.Parse(result.GetProperty("content")[0].GetProperty("text").GetString()!).RootElement;
         Assert.Contains(expected, json.GetProperty("body").GetString());
         Assert.Equal(omitted, json.TryGetProperty("quotedHistoryOmitted", out var o) ? o.GetBoolean() : null);
+        Assert.Equal("https://mail.contoso.com/owa/?ItemID=AAMk1&exvsurl=1&viewmodel=ReadMessageItem", json.GetProperty("webLink").GetString());
     }
 
     [Fact]

@@ -58,6 +58,21 @@ public sealed class EwsContext(
         _mailbox = smtp;
     }
 
+    /// <summary>
+    /// Link that opens an item in Outlook on the web (from WebClientReadFormQueryString), e.g. so the user can
+    /// download an attachment without its content going through the model. Items of other mailboxes open via
+    /// OWA explicit logon (/owa/{mailbox}/).
+    /// </summary>
+    public string? OwaLink(string? webClientReadForm)
+    {
+        if (string.IsNullOrWhiteSpace(webClientReadForm)) return null;
+        // Exchange 2013+ returns an absolute URL; older versions only the query string.
+        var link = Uri.TryCreate(webClientReadForm, UriKind.Absolute, out var absolute) && absolute.Scheme.StartsWith("http")
+            ? webClientReadForm
+            : new Uri(new Uri(Options.EwsUrl), "/owa/" + webClientReadForm.TrimStart('/')).ToString();
+        return _mailbox is null ? link : link.Replace("/owa/?", $"/owa/{_mailbox}/?", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Mailbox an item id belongs to (EWS ids embed it), or null if Exchange cannot tell.</summary>
     public async Task<string?> FindItemMailboxAsync(string itemId)
     {

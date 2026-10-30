@@ -42,7 +42,8 @@ public sealed record MailDetails(
     string Body,
     bool BodyTruncated,
     bool? QuotedHistoryOmitted,
-    IReadOnlyList<AttachmentInfo> Attachments);
+    IReadOnlyList<AttachmentInfo> Attachments,
+    string? WebLink);
 
 public sealed record SearchResult<T>(int TotalCount, bool MoreAvailable, IReadOnlyList<T> Items);
 

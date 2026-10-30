@@ -79,6 +79,10 @@ the server over HTTPS, because Entra redirects them to `https://<mcp-host>/oauth
 | Automatic replies | `get_out_of_office`, `set_out_of_office` |
 | Sending (only with `Exchange:AllowSend=true`) | `send_draft`, `send_meeting_invitations` |
 
+`read_mail` returns a `webLink` that opens the mail in Outlook on the web. The model offers it when you want to open
+or download an attachment yourself, so the file doesn't have to go through the model's context. (Open WebUI doesn't
+offer non-image files from MCP tools as downloads.)
+
 Drafts can get the user's Outlook signature (`includeSignature`). It is read from the Outlook on the web settings in
 the mailbox (`OWA.UserOptions`), because Exchange doesn't add signatures to drafts created via EWS. The server tells the
 model to ask the user first.

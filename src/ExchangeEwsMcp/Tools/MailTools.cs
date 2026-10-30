@@ -155,7 +155,11 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
     }
 
     [McpServerTool(Name = "read_mail", ReadOnly = true, Idempotent = true, OpenWorld = false)]
-    [Description("Reads a single e-mail including body, recipients and the list of attachments.")]
+    [Description("""
+        Reads a single e-mail including body, recipients and the list of attachments (names only).
+        webLink opens the mail in Outlook on the web: offer it when the user wants to open or download an attachment
+        instead of reading its content with get_attachment.
+        """)]
     public async Task<MailDetails> ReadMail(
         [Description("The item id from search_mail.")] string id,
         [Description("Body format: 'text' (default, HTML converted to plain text by Exchange) or 'html'.")] string format = "text",
@@ -164,7 +168,8 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
     {
         await ews.UseMailboxAsync(mailbox);
         var bodyType = string.Equals(format, "html", StringComparison.OrdinalIgnoreCase) ? BodyType.HTML : BodyType.Text;
-        var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, ItemSchema.UniqueBody, EmailMessageSchema.BccRecipients)
+        var props = new PropertySet(BasePropertySet.FirstClassProperties, ItemSchema.Body, ItemSchema.UniqueBody, EmailMessageSchema.BccRecipients,
+            ItemSchema.WebClientReadFormQueryString)
         {
             RequestedBodyType = bodyType,
             RequestedUniqueBodyType = bodyType,
@@ -195,7 +200,8 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
             body,
             truncated,
             useUnique ? true : null,
-            ListAttachments(item));
+            ListAttachments(item),
+            ews.OwaLink(Try(() => item.WebClientReadFormQueryString)));
     }
 
     internal static IReadOnlyList<AttachmentInfo> ListAttachments(Item item) =>
@@ -207,6 +213,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
     [Description("""
         Reads an attachment of an e-mail or calendar item. Text files, PDF and Word (.docx) are returned as text,
         small images as image content, attached e-mails with their text. Other formats are only described.
+        If the user only wants to open or download the file, give them the webLink from read_mail instead.
         """)]
     public async Task<CallToolResult> GetAttachment(
         [Description("The item id.")] string itemId,
@@ -214,7 +221,9 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
         [Description(MailTools.ItemMailboxDescription)] string? mailbox = null)
     {
         await ews.UseMailboxAsync(mailbox);
-        var item = await Item.Bind(ews.Service, new ItemId(itemId), new PropertySet(BasePropertySet.IdOnly, ItemSchema.Attachments));
+        var item = await Item.Bind(ews.Service, new ItemId(itemId), new PropertySet(BasePropertySet.IdOnly, ItemSchema.Attachments,
+            ItemSchema.WebClientReadFormQueryString));
+        var download = ews.OwaLink(Try(() => item.WebClientReadFormQueryString)) is { } link ? $" To open or download it: {link}" : "";
         var attachments = item.Attachments.ToList();
         var match = (int.TryParse(attachment, out var index) && index >= 0 && index < attachments.Count ? attachments[index] : null)
             ?? attachments.FirstOrDefault(a => a.Id == attachment)
@@ -272,7 +281,7 @@ public sealed class MailTools(EwsContext ews, IMemoryCache cache)
         {
             return new CallToolResult { Content = [new TextContentBlock { Text = header + "." }, ImageContentBlock.FromBytes(content, contentType)] };
         }
-        return TextResult($"{header} cannot be shown as text.");
+        return TextResult($"{header} cannot be shown as text.{download}");
     }
 
     private const int MaxImageBytes = 512 * 1024;
