@@ -10,13 +10,16 @@
   <!-- tile -->
   <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
 
-  <!-- envelope -->
-  <rect x="40" y="64" width="144" height="104" rx="16" fill="#ffffff"/>
-  <path d="M50 76 L112 122 L174 76" fill="none" stroke="#2479e0" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- "E": stem, envelope as top bar, short middle bar, bottom bar -->
+  <rect x="62" y="62" width="24" height="132" rx="8" fill="#ffffff"/>
+  <rect x="62" y="62" width="112" height="42" rx="10" fill="#ffffff"/>
+  <path d="M72 71 L118 93 L164 71" fill="none" stroke="#2479e0" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="62" y="117" width="52" height="22" rx="8" fill="#ffffff"/>
+  <rect x="62" y="172" width="112" height="22" rx="8" fill="#ffffff"/>
 
   <!-- cable and plug: the connection to the AI client -->
-  <path d="M184 116 H192 a16 16 0 0 1 16 16 V158" fill="none" stroke="#8fdcff" stroke-width="11" stroke-linecap="round"/>
-  <rect x="186" y="156" width="44" height="34" rx="9" fill="#8fdcff"/>
-  <rect x="196" y="190" width="8" height="18" rx="3" fill="#8fdcff"/>
-  <rect x="212" y="190" width="8" height="18" rx="3" fill="#8fdcff"/>
+  <path d="M112 128 H146" fill="none" stroke="#8fdcff" stroke-width="8" stroke-linecap="round"/>
+  <rect x="144" y="113" width="30" height="30" rx="7" fill="#8fdcff"/>
+  <rect x="174" y="119" width="18" height="6" rx="3" fill="#8fdcff"/>
+  <rect x="174" y="131" width="18" height="6" rx="3" fill="#8fdcff"/>
 </svg>

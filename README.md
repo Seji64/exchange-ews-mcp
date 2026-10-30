@@ -292,3 +292,6 @@ The feature set was inspired by [ShermanGu/exchange-ews-mcp](https://github.com/
 ## License
 
 MIT
+
+Microsoft Exchange is a trademark of Microsoft Corporation. This project is an independent open-source project and is
+not affiliated with, endorsed or sponsored by Microsoft.
