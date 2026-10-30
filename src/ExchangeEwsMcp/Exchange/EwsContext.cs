@@ -45,12 +45,32 @@ public sealed class EwsContext(
 
         // X-AnchorMailbox and FolderId need an SMTP address; models often pass a name or alias instead.
         var key = "mailbox:" + mailbox.ToLowerInvariant();
+        if (mailbox.Contains('@'))
+        {
+            _mailbox = mailbox;
+            return;
+        }
         if (!cache.TryGetValue(key, out string? smtp))
         {
             smtp = (await EwsHelpers.ResolveOneAsync(Service, mailbox, ResolveNameSearchLocation.DirectoryOnly, "Mailbox")).Address;
             cache.Set(key, smtp, TimeSpan.FromHours(4));
         }
         _mailbox = smtp;
+    }
+
+    /// <summary>Mailbox an item id belongs to (EWS ids embed it), or null if Exchange cannot tell.</summary>
+    public async Task<string?> FindItemMailboxAsync(string itemId)
+    {
+        try
+        {
+            // The mailbox given for an EwsId source is ignored; the response names the real one.
+            var converted = await Service.ConvertId(new AlternateId(IdFormat.EwsId, itemId, "unknown@invalid"), IdFormat.EwsId);
+            return (converted as AlternateId)?.Mailbox is { Length: > 0 } mailbox ? mailbox : null;
+        }
+        catch (Exception e) when (e is ServiceResponseException or ServiceRequestException or ServiceLocalException)
+        {
+            return null; // best effort: the caller reports the original error
+        }
     }
 
     /// <summary>SMTP address of the mailbox selected with <see cref="UseMailboxAsync"/>, or null for the user's own.</summary>

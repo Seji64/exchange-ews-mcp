@@ -170,6 +170,45 @@ public sealed class EwsToolTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Item_from_a_shared_mailbox_is_retried_there_when_the_mailbox_was_not_passed()
+    {
+        _ews.Responses["GetItem"] = """
+            <m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Error">
+              <m:MessageText>The specified object was not found in the store.</m:MessageText>
+              <m:ResponseCode>ErrorItemNotFound</m:ResponseCode><m:DescriptiveLinkKey>0</m:DescriptiveLinkKey><m:Items />
+            </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
+            """;
+        _ews.Responses["ConvertId"] = """
+            <m:ConvertIdResponse><m:ResponseMessages><m:ConvertIdResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:AlternateId xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="t:AlternateIdType"
+                Format="EwsId" Id="AAMkShared" Mailbox="techmaster@contoso.com" />
+            </m:ConvertIdResponseMessage></m:ResponseMessages></m:ConvertIdResponse>
+            """;
+        _ews.Responses["ResolveNames"] = """
+            <m:ResolveNamesResponse><m:ResponseMessages><m:ResolveNamesResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:ResolutionSet TotalItemsInView="1" IncludesLastItemInRange="true"><t:Resolution><t:Mailbox>
+                <t:Name>Alice</t:Name><t:EmailAddress>alice@contoso.com</t:EmailAddress>
+                <t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType>
+              </t:Mailbox></t:Resolution></m:ResolutionSet>
+            </m:ResolveNamesResponseMessage></m:ResponseMessages></m:ResolveNamesResponse>
+            """;
+        _ews.AnchoredResponses["GetItem"] = """
+            <m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success">
+              <m:ResponseCode>NoError</m:ResponseCode>
+              <m:Items><t:Message><t:ItemId Id="AAMkShared" ChangeKey="C" /><t:Subject>Shared hello</t:Subject><t:Body BodyType="Text">Hi</t:Body></t:Message></m:Items>
+            </m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>
+            """;
+
+        var result = await CallToolAsync("read_mail", new { id = "AAMkShared" });
+
+        Assert.False(result.TryGetProperty("isError", out var isError) && isError.GetBoolean(), result.ToString());
+        Assert.Contains("Shared hello", result.GetProperty("content")[0].GetProperty("text").GetString());
+        Assert.Equal("techmaster@contoso.com", _ews.AnchorMailboxes.Last());
+    }
+
+    [Fact]
     public async Task Ews_errors_are_reported_to_the_model()
     {
         _ews.Responses["GetItem"] = """

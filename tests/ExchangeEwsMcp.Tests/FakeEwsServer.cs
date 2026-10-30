@@ -21,6 +21,9 @@ public sealed class FakeEwsServer : IAsyncDisposable
     /// <summary>Operation name (e.g. "FindItem") → SOAP body content placed inside s:Body.</summary>
     public ConcurrentDictionary<string, string> Responses { get; } = new();
 
+    /// <summary>Like <see cref="Responses"/>, but used for requests carrying X-AnchorMailbox.</summary>
+    public ConcurrentDictionary<string, string> AnchoredResponses { get; } = new();
+
     public int StatusCode { get; set; } = 200;
 
     public string Url { get; }
@@ -42,9 +45,10 @@ public sealed class FakeEwsServer : IAsyncDisposable
                 http.Response.Headers["x-ms-diagnostics"] = "2000003;reason=\"Invalid audience\"";
                 return;
             }
-            var operation = Responses.Keys.FirstOrDefault(op => body.Contains($":{op} ") || body.Contains($":{op}>"));
+            var responses = http.Request.Headers.ContainsKey("X-AnchorMailbox") && !AnchoredResponses.IsEmpty ? AnchoredResponses : Responses;
+            var operation = responses.Keys.FirstOrDefault(op => body.Contains($":{op} ") || body.Contains($":{op}>"));
             http.Response.ContentType = "text/xml; charset=utf-8";
-            await http.Response.WriteAsync(Envelope(operation is null ? "" : Responses[operation]));
+            await http.Response.WriteAsync(Envelope(operation is null ? "" : responses[operation]));
         });
         _app.StartAsync().GetAwaiter().GetResult();
         var address = _app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();

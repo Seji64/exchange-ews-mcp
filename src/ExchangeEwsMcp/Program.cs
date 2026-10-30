@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using ExchangeEwsMcp.Auth;
 using ExchangeEwsMcp.Configuration;
@@ -143,6 +144,26 @@ var mcp = builder.Services.AddMcpServer(o =>
                 Content = [new TextContentBlock { Text = message }],
             };
         }
+    }).AddCallToolFilter(next => async (context, ct) =>
+    {
+        // Models often pass the id of an item from a shared mailbox without the mailbox parameter. Exchange then looks
+        // in the user's own mailbox and reports "not found"; the id itself names its mailbox, so retry there once.
+        try
+        {
+            return await next(context, ct);
+        }
+        catch (ServiceResponseException e) when (e.ErrorCode == ServiceError.ErrorItemNotFound
+            && context.Params?.Arguments is { } args && !args.ContainsKey("mailbox") && ItemIdArgument(args) is { } itemId
+            && context.Services?.GetService<EwsContext>() is { } ews)
+        {
+            var owner = await ews.FindItemMailboxAsync(itemId);
+            if (owner is null || string.Equals(owner, await ews.GetCurrentUserSmtpAsync(), StringComparison.OrdinalIgnoreCase))
+            {
+                throw;
+            }
+            args["mailbox"] = JsonSerializer.SerializeToElement(owner);
+            return await next(context, ct);
+        }
     }));
 if (exchangeOptions.AllowSend)
 {
@@ -189,6 +210,16 @@ return 0;
 
 public partial class Program
 {
+    private static string? ItemIdArgument(IDictionary<string, JsonElement> args) =>
+        new[] { "id", "itemId", "ids" }.Select(name => args.TryGetValue(name, out var v) ? v : default)
+            .Select(v => v.ValueKind switch
+            {
+                JsonValueKind.String => v.GetString(),
+                JsonValueKind.Array when v.GetArrayLength() > 0 && v[0].ValueKind == JsonValueKind.String => v[0].GetString(),
+                _ => null,
+            })
+            .FirstOrDefault(id => !string.IsNullOrEmpty(id));
+
     /// <summary>Non-secret claims of a passthrough token, to diagnose rejected tokens.</summary>
     private static string DescribeToken(System.Security.Claims.ClaimsPrincipal? user)
     {

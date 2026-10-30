@@ -171,6 +171,12 @@ That guide creates the application group `Outlook`, the Web API applications `ht
    AD FS issues refresh tokens for confidential clients only with *Keep Me Signed In* or device registration (see the
    linked guide). Without them, users have to sign in again when the access token expires.
 
+## Running without Docker
+
+Every [release](https://github.com/Seji64/exchange-ews-mcp/releases) has self-contained binaries for Linux (x64) and
+Windows (x64); no .NET installation is needed. Unpack, adjust `appsettings.json` (or use environment variables), and run
+`ExchangeEwsMcp` / `ExchangeEwsMcp.exe`. Use `--urls http://0.0.0.0:8080` to choose the listening address.
+
 ## Running with Docker
 
 ```bash
