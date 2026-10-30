@@ -4,8 +4,9 @@ An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Serv
 **EWS with OAuth (Modern Authentication)**. It's written in C# / .NET 10 and runs as a Docker container.
 
 > [!WARNING]
-> **Work in progress.** This project has so far only been tested against simulated identity providers and EWS endpoints,
-> not against a real Exchange Server, Entra ID, AD FS or Open WebUI. Configuration and tools may still change.
+> **Work in progress.** Tested so far with Exchange Server SE, Microsoft Entra ID (Hybrid Modern Authentication) and
+> Open WebUI in Passthrough mode: reading the own mailbox and a shared mailbox. Broker mode, AD FS and the writing tools
+> have only been tested against simulated endpoints. Configuration and tools may still change.
 > Start with `Exchange:AccessLevel=ReadOnly` when you try it.
 
 - **Streamable HTTP** transport, so MCP clients like [Open WebUI](https://docs.openwebui.com/features/extensibility/mcp/) connect to it directly, without mcpo.
@@ -232,6 +233,8 @@ docker compose up -d
 | `AADSTS500011: The resource principal named https://… was not found` | The host in the EWS scope isn't registered for HMA. Use one of the URLs from the `ServicePrincipalNames` list above (often a dedicated EWS host). |
 | `AADSTS9010010: The resource parameter provided in the request doesn't match with the requested scopes` | The EWS scope isn't a full URL (e.g. only `EWS.AccessAsUser.All`). Open WebUI then also sends a `resource` parameter, which Entra rejects. Always use `https://<host>/EWS.AccessAsUser.All`, then click **Register Client** in Open WebUI again and save. |
 | Tool error mentioning HTTP 401 | Exchange rejected the token: the scope host and `Exchange:EwsUrl` don't belong to the same HMA-registered Exchange, or EWS doesn't allow OAuth. |
+| `ErrorConnectionFailed: Cannot open mailbox …` for a shared mailbox | The request was not routed to the server hosting that mailbox. The server sends `X-AnchorMailbox` when the tool gets the `mailbox` parameter; make sure the model passes it, including for `read_mail` and other item tools. |
+| `ErrorInvalidSmtpAddress` | A mailbox could not be resolved to an SMTP address. Use the full e-mail address of the shared mailbox. |
 
 ## Configuration reference
 
