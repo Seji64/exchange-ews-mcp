@@ -5,8 +5,8 @@ An [MCP](https://modelcontextprotocol.io) server for **on-premises Exchange Serv
 
 > [!WARNING]
 > **Work in progress.** Tested so far with Exchange Server SE, Microsoft Entra ID (Hybrid Modern Authentication) and
-> Open WebUI in Passthrough mode: reading the own mailbox and a shared mailbox. Broker mode, AD FS and the writing tools
-> have only been tested against simulated endpoints. Configuration and tools may still change.
+> Open WebUI in Passthrough mode: reading the own mailbox and a shared mailbox, creating drafts, and the `NoDelete` access
+> level. Broker mode, AD FS and the other writing tools have only been tested against simulated endpoints. Configuration and tools may still change.
 > Start with `Exchange:AccessLevel=ReadOnly` when you try it.
 
 - **Streamable HTTP** transport, so MCP clients like [Open WebUI](https://docs.openwebui.com/features/extensibility/mcp/) connect to it directly, without mcpo.
